@@ -1,5 +1,10 @@
 # HoshimiLocalify iOS
 
+이 저장소 루트에서 빌드 명령을 실행한다. 번역 데이터는 `hoshimi-local` 서브모듈이다.
+Android 참고 구현은 `../hoshimi-localify-android/app/src/main/cpp/HoshimiLocalify`에 있다.
+복제 시 `git submodule update --init --recursive`로 번역 데이터를 준비한다.
+게임 IPA와 분석 자료는 추적하지 않는 `dump/`에, 빌드 산출물은 `build/`에 둔다.
+
 2026-09-15: 사용자가 SideStore + iLoader로 복호화된 IDOLY PRIDE 6.0.2의 설치와 실행에 성공했다. 기존 Android의 IL2CPP 번역 훅·JSON 데이터와 폰트 자산 교체를 이식한다. AstralParty/프로토버프 방식은 사용하지 않는다.
 
 ## 현재 결과물: Hook v30 (이미지 교체 실기 확인)
@@ -43,20 +48,20 @@ Unity API를 모의 구현한 ARM64 이미지 테스트와 기존 회귀 테스�
 
 ```powershell
 chcp 65001 > $null
-./ios/build-hook.ps1
-python ios/tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib ios/build/hook-v2/HoshimiLocalify.dylib --hook-plan ios/build/hook-v2/hook-plan.json --font-file ios/PretendardJP-SemiBold.otf --local-data-root app/src/main/assets/hoshimi-local --include-adv --include-master --include-images --patch-revision 30 --output ios/build/IdolyPride-6.0.2-HoshimiHook-v30.ipa
+./build-hook.ps1
+python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --include-images --patch-revision 30 --output build/IdolyPride-6.0.2-HoshimiHook-v30.ipa
 ```
 
 출력 IPA가 이미 있으면 새 이름을 지정한다. 원본 IPA는 변경하지 않는다.
 
-기준 폰트는 개발 폴더의 `ios/PretendardJP-SemiBold.otf`다. 출력 이름은 매번 새 이름을 사용한다.
+기준 폰트는 개발 폴더의 `PretendardJP-SemiBold.otf`다. 출력 이름은 매번 새 이름을 사용한다.
 
 `tools/static_hook.py`는 원본 UnityFramework 전체 SHA-256, IL2CPP 코드 등록 테이블, 래퍼의 분기와 대상 함수의 시작 명령을 검증한다. 이 입력에서 실제 대상 RVA는 `0x6efc218`이며, v1이 찾은 래퍼 RVA는 `0x6efd66c`다. 다른 게임 버전에는 그대로 적용할 수 없다.
 
 ### hoshimi-local 데이터 사용
 
 iOS용 번역 원본도 Android와 같은 서브레포
-`app/src/main/assets/hoshimi-local`을 사용한다. ADV와 MasterDB를 포함할 때 파일을
+`hoshimi-local`을 사용한다. ADV와 MasterDB를 포함할 때 파일을
 별도의 iOS 전용 번역 폴더로 복제하지 않는다. 패키저가 서브레포의 `version.txt`,
 `local-files/resource/adv`, `local-files/masterTrans`, `local-files/genericTrans`를
 검증하고, MasterDB와 generic은 Android 맵을 컴파일한 인덱스로 만들어 IPA의
@@ -64,7 +69,7 @@ iOS용 번역 원본도 Android와 같은 서브레포
 
 ```powershell
 chcp 65001 > $null
-python ios/tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib ios/build/hook-v2/HoshimiLocalify.dylib --hook-plan ios/build/hook-v2/hook-plan.json --font-file ios/PretendardJP-SemiBold.otf --local-data-root app/src/main/assets/hoshimi-local --include-adv --include-master --output ios/build/IdolyPride-6.0.2-HoshimiHook-with-data.ipa
+python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --output build/IdolyPride-6.0.2-HoshimiHook-with-data.ipa
 ```
 
 현재 서브레포 기준 내장 대상은 ADV 3,005개, MasterDB 90개와 generic 인덱스다. 패키저가
@@ -82,9 +87,9 @@ ARM64 에뮬레이션으로 I18n·폰트·ADV·MasterDB·generic 게이트웨이
 ```powershell
 chcp 65001 > $null
 $env:PYTHONIOENCODING = 'utf-8'
-python -m pip install --target ios/build/test-runtime --only-binary=:all: capstone unicorn
-$env:PYTHONPATH = (Resolve-Path ios/build/test-runtime).Path
-python -m unittest discover -s ios/tools -p 'test_*.py'
+python -m pip install --target build/test-runtime --only-binary=:all: capstone unicorn
+$env:PYTHONPATH = (Resolve-Path build/test-runtime).Path
+python -m unittest discover -s tools -p 'test_*.py'
 ```
 
 정적 폰트 교체 IPA를 설치한 뒤에도 네모가 보이면 `SourceSansPro-Regular`가 실제 표시 경로에서 사용되는지 로그와 화면을 함께 확인한다.
@@ -110,8 +115,8 @@ Android NDK 26.3.11579264의 Clang/LLD로 ARM64 Mach-O dylib를 만든다. NDK�
 
 ```powershell
 chcp 65001 > $null
-./ios/build-probe.ps1
-python ios/tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib ios/build/HoshimiProbe.dylib --output ios/build/IdolyPride-6.0.2-HoshimiProbe-v1.ipa
+./build-probe.ps1
+python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/HoshimiProbe.dylib --output build/IdolyPride-6.0.2-HoshimiProbe-v1.ipa
 ```
 
 출력 파일이 이미 있으면 덮어쓰지 않고 중단한다. 재패키징할 때 새 출력 이름을 지정한다.
@@ -126,6 +131,6 @@ python ios/tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2
 - 진단 라이브러리는 `Frameworks/HoshimiProbe.dylib`에 들어가며, UnityFramework에서 `@loader_path/../HoshimiProbe.dylib`로 로드한다.
 - 파일 공유를 켜고 기존 리소스 서명 파일을 제거한다. 기존 Mach-O 서명은 패키징 후 유효하지 않으므로 SideStore에서 **내장 라이브러리와 앱 모두 재서명**해야 한다.
 - 패키징 후 ZIP CRC와 수정 바이너리·내장 라이브러리 바이트를 확인한다. 별도의 `.report.json`에 입출력 SHA-256을 기록한다.
-- 헤더 변경 테스트: `python -m unittest discover -s ios/tools -p "test_*.py"`.
+- 헤더 변경 테스트: `python -m unittest discover -s tools -p "test_*.py"`.
 
 Probe v1은 사용자 기기에서 `PASS: resolver probe completed`가 기록되어 라이브러리 로딩과 메서드 탐색이 확인됐다.

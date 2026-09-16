@@ -1,7 +1,7 @@
 # iOS 한글패치 Android 기능 대조 및 이식 계획
 
-기준은 `app/src/main/cpp/HoshimiLocalify`와
-`app/src/main/assets/hoshimi-local`이다. 게임 카메라·그래픽·FPS·의상 해금 같은 편의/개조
+기준은 `../hoshimi-localify-android/app/src/main/cpp/HoshimiLocalify`와
+`hoshimi-local`이다. 게임 카메라·그래픽·FPS·의상 해금 같은 편의/개조
 기능은 이 문서의 이식 범위에서 제외하고, 번역에 직접 필요한 경로만 비교한다.
 
 ## 현재 기준선

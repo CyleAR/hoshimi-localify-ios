@@ -1,0 +1,3 @@
+[submodule "hoshimi-local"]
+	path = hoshimi-local
+	url = https://github.com/CyleAR/IdolyprideTranslationDataKor.git

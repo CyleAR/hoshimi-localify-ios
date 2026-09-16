@@ -314,7 +314,7 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
                 "bytes": sum(path.stat().st_size for _, path in local_payload) +
                          (len(master_blob) if master_blob else 0) +
                          (len(generic_blob) if generic_blob else 0),
-                "source": "app/src/main/assets/hoshimi-local",
+                "source": "hoshimi-local",
             }
             if master_details:
                 report["local_data"]["master_index"] = master_details
