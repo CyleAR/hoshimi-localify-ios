@@ -11,7 +11,7 @@ import tempfile
 import unittest
 
 from unicorn import Uc, UC_ARCH_ARM64, UC_MODE_ARM
-from unicorn.arm64_const import UC_ARM64_REG_X0, UC_ARM64_REG_X1, UC_ARM64_REG_X2, UC_ARM64_REG_SP, UC_ARM64_REG_LR
+from unicorn.arm64_const import UC_ARM64_REG_X0, UC_ARM64_REG_X1, UC_ARM64_REG_X2, UC_ARM64_REG_X3, UC_ARM64_REG_X4, UC_ARM64_REG_SP, UC_ARM64_REG_LR
 
 ROOT = Path(__file__).resolve().parents[1]
 SUPPORT = r'''
@@ -29,6 +29,7 @@ int snprintf(char *s,size_t n,const char *fmt,unsigned value) { (void)n; (void)f
 static void *generic_blob;
 static size_t generic_blob_size;
 static unsigned adv_dash_replacements, adv_josa_replacements;
+static char display_username[4096];
 '''
 
 
@@ -59,9 +60,11 @@ class GenericRuntimeTests(unittest.TestCase):
         a, b = generic.index("static int load_generic_index("), generic.index("static size_t generic_flag_length(")
         generic = generic[:a] + generic[b:]
         wrapper = '''
-__attribute__((section(".entry"))) char *run(char *input, void *blob, size_t size) {
+__attribute__((section(".entry"))) char *run(char *input, void *blob, size_t size, char *username, int josa_only) {
  heap=0x800000; generic_blob=blob; generic_blob_size=size;
+ if(username) memcpy(display_username,username,strlen(username)+1);
  size_t length=0; int translated=0;
+ if(josa_only) return normalize_text(input,strlen(input),strlen(input)*4+4097,&length,1);
  return generic_translate_utf8(input,strlen(input),&length,&translated,1);
 }
 '''
@@ -78,17 +81,20 @@ __attribute__((section(".entry"))) char *run(char *input, void *blob, size_t siz
     def tearDownClass(cls):
         cls.temp.cleanup()
 
-    def translate(self, text):
+    def translate(self, text, username="", josa_only=False):
         uc = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
         uc.mem_map(0x100000, 0x1000000)
         uc.mem_write(0x100000, self.code)
         uc.mem_write(0x300000, text.encode() + b"\0")
         uc.mem_write(0x400000, self.blob)
+        uc.mem_write(0x500000, username.encode() + b"\0")
+        uc.reg_write(UC_ARM64_REG_X3, 0x500000)
+        uc.reg_write(UC_ARM64_REG_X4, int(josa_only))
         for reg, value in [(UC_ARM64_REG_X0, 0x300000), (UC_ARM64_REG_X1, 0x400000), (UC_ARM64_REG_X2, len(self.blob)), (UC_ARM64_REG_SP, 0x700000), (UC_ARM64_REG_LR, 0x200000)]:
             uc.reg_write(reg, value)
         uc.emu_start(0x100000, 0x200000, count=2000000)
         self.assertNotEqual(uc.reg_read(UC_ARM64_REG_X0), 0)
-        return bytes(uc.mem_read(uc.reg_read(UC_ARM64_REG_X0), 4096)).split(b"\0")[0].decode()
+        return bytes(uc.mem_read(uc.reg_read(UC_ARM64_REG_X0), 16384)).split(b"\0")[0].decode()
 
     def test_untranslated_numeric_and_tagged_text_never_duplicates(self):
         for text in ["13920", "G3", "12:00 시작", "5일 남음", "<b>Dummy.</b>", "plain", ""]:
@@ -104,6 +110,36 @@ __attribute__((section(".entry"))) char *run(char *input, void *blob, size_t siz
                 result = self.translate(source)
                 self.assertEqual(result, expected)
                 self.assertEqual(self.translate(result), expected)
+
+    def test_display_username_before_josa(self):
+        cases = [("{user}[은/는] 왔다", "민준", "민준은 왔다"),
+                 ("{user}[은/는] 왔다", "유나", "유나는 왔다"),
+                 ("{user}[으로/로]", "하늘", "하늘로"),
+                 ("{user}[이/가]", "7", "7이"),
+                 ("{user}/{user}", "이름", "이름/이름"),
+                 ("{user}", "", "{user}"),
+                 ("{user}", "김,별", "김,별")]
+        for source, name, expected in cases:
+            with self.subTest(name=name):
+                self.assertEqual(self.translate(source, name), expected)
+
+    def test_notification_only_resolves_josa(self):
+        self.assertEqual(self.translate("민준[은/는], ⸺ {user}", "유나", True),
+                         "민준은, ⸺ {user}")
+
+    def test_username_expansion_capacity(self):
+        name = "가" * 1000
+        self.assertEqual(self.translate("{user}{user}", name), name * 2)
+
+    def test_masterdb_assignment_normalizes_username_and_josa(self):
+        source = (ROOT / "hook/hook.c").read_text(encoding="utf-8")
+        start = source.index("static int master_apply_path(")
+        end = source.index("static void localize_master(", start)
+        master_apply = source[start:end]
+        self.assertIn("normalize_text(translation", master_apply)
+        self.assertIn("master_list_replace_strings(property, localized)", master_apply)
+        self.assertIn("string_new_utf8(localized)", master_apply)
+        self.assertEqual(self.translate("{user}[은/는] 왔다", "민준"), "민준은 왔다")
 
 
 if __name__ == "__main__":

@@ -18,7 +18,7 @@ from static_hook import (TARGET, EXPECTED, FONT_TARGET, FONT_EXPECTED,
                          TMP_SETCHARARRAY_TARGET, TMP_SETCHARARRAY_EXPECTED,
                          TEXTFIELD_TARGET, TEXTFIELD_EXPECTED,
                          UI_TEXT_TARGET, UI_TEXT_EXPECTED,
-                         branch, gateway, IMAGE_SITES)
+                         branch, gateway, IMAGE_SITES, USERNAME_SITES)
 
 CAVE = 0x9788050
 SLOT = 0xAB944D8
@@ -105,6 +105,15 @@ class GatewayExecutionTests(unittest.TestCase):
                         expected=expected, saved=saved, stack_size=size)
                     if index == 0 and (not armed or trampoline):
                         self.assertEqual(bytes(uc.mem_read(sp - 80, 16)), struct.pack("<QQ", 9, 8))
+
+    def test_username_gateways_preserve_original_arguments(self):
+        for index, (name, target, expected) in enumerate(USERNAME_SITES):
+            for armed, trampoline in ((False, False), (True, False), (True, True)):
+                with self.subTest(site=name, armed=armed, trampoline=trampoline):
+                    self.run_gateway(armed, 0x103A40000, trampoline=trampoline,
+                        target=target, cave=0x9788210 + 32 * index, slot=0xAB94548 + 8 * index,
+                        expected=expected, saved=(20, 19) if index == 0 else (22, 21),
+                        stack_size=32 if index == 0 else 48)
 
     def test_unarmed_falls_back_to_original(self):
         self.run_gateway(False, 0)

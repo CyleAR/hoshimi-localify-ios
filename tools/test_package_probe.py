@@ -22,6 +22,16 @@ def sample_image():
 
 
 class HeaderInjectionTests(unittest.TestCase):
+    def test_display_username_setting_defaults_to_game_name(self):
+        items = plistlib.loads(settings_plist())["PreferenceSpecifiers"]
+        item = next(x for x in items if x.get("Key") == "displayUserName")
+        self.assertEqual(item["Type"], "PSTextFieldSpecifier")
+        self.assertEqual(item["DefaultValue"], "")
+        self.assertFalse(item["IsSecure"])
+        self.assertNotIn("KeyboardType", item)
+        self.assertEqual(item["AutocapitalizationType"], "None")
+        self.assertEqual(item["AutocorrectionType"], "No")
+
     def test_settings_toggle_defaults_to_enabled(self):
         root = plistlib.loads(settings_plist())
         toggles = {item["Key"]: item for item in root["PreferenceSpecifiers"] if "Key" in item}

@@ -36,8 +36,8 @@ def settings_plist():
         "PreferenceSpecifiers": [
             {
                 "Type": "PSGroupSpecifier",
-                "Title": "아이프라 한글패치",
-                "FooterText": "변경 후 게임을 완전히 종료하고 다시 실행하세요.",
+                "Title": "한글패치",
+                "FooterText": "변경 후 게임을 완전히 종료한 뒤 다시 실행하세요.",
             },
             {
                 "Type": "PSToggleSwitchSpecifier",
@@ -75,6 +75,20 @@ def settings_plist():
                 "DefaultValue": True,
                 "TrueValue": True,
                 "FalseValue": False,
+            },
+            {
+                "Type": "PSGroupSpecifier",
+                "Title": "표시용 닉네임",
+                "FooterText": "비워 두면 기존 닉네임을 사용합니다. 변경 후 게임을 완전히 종료한 뒤 다시 실행하세요.",
+            },
+            {
+                "Type": "PSTextFieldSpecifier",
+                "Title": "닉네임",
+                "Key": "displayUserName",
+                "DefaultValue": "",
+                "IsSecure": False,
+                "AutocapitalizationType": "None",
+                "AutocorrectionType": "No",
             },
             {
                 "Type": "PSGroupSpecifier",

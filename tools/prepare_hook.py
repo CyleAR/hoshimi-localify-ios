@@ -83,7 +83,8 @@ def prepare(ipa, translation, out):
         header.append(f"#define HOSHIMI_{key.upper()} 0x{hook[key]:x}ULL")
     for name in ("tmp_set_text", "tmp_populate", "tmp_settext_bool", "tmp_setchararray",
                  "textfield", "ui_text", "image_sprite", "image_override",
-                 "image_texture", "image_enable"):
+                 "image_texture", "image_enable", "username_adv", "username_message",
+                 "username_notification"):
         for suffix in ("target_rva", "cave_rva", "slot_rva", "original_rva"):
             key = f"{name}_{suffix}"
             header.append(f"#define HOSHIMI_{key.upper()} 0x{hook[key]:x}ULL")
@@ -99,7 +100,8 @@ def prepare(ipa, translation, out):
                       ",".join(str(x) for x in bytes.fromhex(hook[key])) + "};")
     for name in ("tmp_set_text", "tmp_populate", "tmp_settext_bool", "tmp_setchararray",
                  "textfield", "ui_text", "image_sprite", "image_override",
-                 "image_texture", "image_enable"):
+                 "image_texture", "image_enable", "username_adv", "username_message",
+                 "username_notification"):
         for suffix in ("gateway_hex", "patched_entry_hex", "target_original_hex"):
             key = f"{name}_{suffix}"
             header.append("static const unsigned char " + key + "[] = {" +

@@ -26,6 +26,11 @@ IMAGE_SITES = (
     ("image_texture", 0x7B2C9A8, bytes.fromhex("f657bda9f44f01a9fd7b02a9fd830091")),
     ("image_enable", 0x797EEA0, bytes.fromhex("f85fbca9f65701a9f44f02a9fd7b03a9")),
 )
+USERNAME_SITES = (
+    ("username_adv", 0x4847624, bytes.fromhex("f44fbea9fd7b01a9fd430091330603b0")),
+    ("username_message", 0x2760008, bytes.fromhex("f657bda9f44f01a9fd7b02a9fd830091")),
+    ("username_notification", 0x275FDC0, bytes.fromhex("f657bda9f44f01a9fd7b02a9fd830091")),
+)
 MODULE = 0x9DEEB28
 TOKEN_ROW = 0x26F
 HELPER_ROW = 0x27E
@@ -57,7 +62,7 @@ def gateway(cave, slot, target, displaced):
                           MASTER_EXPECTED[:4], TMP_SET_TEXT_EXPECTED[:4],
                           TMP_POPULATE_EXPECTED[:4], TMP_SETTEXT_BOOL_EXPECTED[:4],
                           TMP_SETCHARARRAY_EXPECTED[:4], TEXTFIELD_EXPECTED[:4],
-                          UI_TEXT_EXPECTED[:4], *(site[2][:4] for site in IMAGE_SITES)):
+                          UI_TEXT_EXPECTED[:4], *(site[2][:4] for site in IMAGE_SITES + USERNAME_SITES)):
         raise ValueError("Unsupported displaced instruction")
     page_delta = (slot >> 12) - (cave >> 12)
     if not -(1 << 20) <= page_delta < (1 << 20):
@@ -129,6 +134,18 @@ def plan(data):
         raise ValueError("Unexpected OctoResourceLoader ADV prologue")
     if data[MASTER_TARGET:MASTER_TARGET + len(MASTER_EXPECTED)] != MASTER_EXPECTED:
         raise ValueError("Unexpected MessageExtensions.MergeFrom prologue")
+    # Metadata v31: ADVEnginePresenterBase<TView>.get_UserName token 0x0600d347,
+    # methodDef 54086, shared object instantiation methodSpec 21875.
+    # Generic method mapping -> function index 20631 -> verified code pointer.
+    if struct.unpack_from("<3i", data, 0x8846890 + 21875 * 12) != (54086, 10, -1):
+        raise ValueError("ADV username method spec mismatch")
+    if struct.unpack_from("<4i", data, 0x8c4e074 + 20638 * 16) != (21875, 20631, 17656, -1):
+        raise ValueError("ADV username generic mapping mismatch")
+    if struct.unpack_from("<Q", data, 0x9a32a70 + 20631 * 8)[0] != 0x4847624:
+        raise ValueError("ADV username shared method pointer mismatch")
+    for row, expected in ((0x1b3cf, 0x275fdc0), (0x1b3d0, 0x2760008)):
+        if struct.unpack_from("<Q", data, 169990024 + 8 * (row - 1))[0] != expected:
+            raise ValueError("Message username codegen pointer mismatch")
     text_sites = [
         ("tmp_set_text", TMP_SET_TEXT_TARGET, TMP_SET_TEXT_EXPECTED),
         ("tmp_populate", TMP_POPULATE_TARGET, TMP_POPULATE_EXPECTED),
@@ -137,7 +154,7 @@ def plan(data):
         ("textfield", TEXTFIELD_TARGET, TEXTFIELD_EXPECTED),
         ("ui_text", UI_TEXT_TARGET, UI_TEXT_EXPECTED),
     ]
-    text_sites.extend(IMAGE_SITES)
+    text_sites.extend(IMAGE_SITES + USERNAME_SITES)
     for name, target, expected in text_sites:
         if data[target:target + len(expected)] != expected:
             raise ValueError(f"Unexpected {name} prologue")
@@ -235,7 +252,7 @@ def patch(data, expected_plan):
     # Offline gateways keep executable pages unchanged at runtime (no JIT).
     for name in ("tmp_set_text", "tmp_populate", "tmp_settext_bool",
                  "tmp_setchararray", "textfield", "ui_text",
-                 *(site[0] for site in IMAGE_SITES)):
+                 *(site[0] for site in IMAGE_SITES + USERNAME_SITES)):
         cave = actual[f"{name}_cave_rva"]
         code = bytes.fromhex(actual[f"{name}_gateway_hex"])
         target = actual[f"{name}_target_rva"]

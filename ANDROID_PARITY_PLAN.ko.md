@@ -83,18 +83,20 @@ TMP 자막을 갱신한다. 현재 데이터는 514개 클립, 4,681줄, 약 711
 것을 우선안으로 한다. `phoneSubtitles.json`은 같은 내용을 빌드 시 이진 인덱스로 바꿔
 내장할 수 있다.
 
-### 3. 사용자명 치환
+### 3. 사용자명 치환 — v33 다국어 입력 보완
 
-Android의 `displayUserName` 설정과 다음 경로가 iOS에는 없다.
-
-- ADV의 플레이어 이름 getter
-- `MessageDetail.GetReplacedMessage`
-- `MessageDetail.GetNotificationText`
-- Master/ADV 문장 속 사용자명 자리표시자 치환 후 조사 처리
-
-메시지 두 함수의 주소는 각각 `0x2760008`, `0x275fdc0`으로 확보했다. ADV 사용자명 getter는
-probe v4에서 클래스 탐색이 실패했으므로 실제 구현 클래스와 메서드를 다시 찾아야 한다.
-iOS 설정에는 사용자명 입력 칸도 추가해야 한다.
+- `displayUserName`을 iOS 설정의 텍스트 입력란으로 추가했다. 공란은 기존 게임 이름 유지.
+- 일반 ADV의 제네릭 부모 getter 공유 구현 `0x4847624`를 메타데이터/등록 테이블로 확인하고 연결했다.
+- `MessageDetail.GetReplacedMessage` (`0x2760008`), `GetNotificationText` (`0x275fdc0`)의 이름 인자를 교체한다.
+- 최종 텍스트에서 `{user}`를 먼저 치환한 뒤 받침 기준으로 조사를 선택한다.
+- 알림 반환값은 Android와 동일하게 조사만 처리한다.
+- 계정 이름이나 서버 데이터는 변경하지 않는다. 설정 변경은 다음 실행부터 적용한다.
+- Android와 같은 부모 getter를 훅하며 별도 LoveADV override는 추가하지 않는다.
+- HomeAction·HomeTalk·HomeTalkCall은 공통 UI 훅을 우회하므로 MasterDB setter 직전에서도
+  `{user}`와 조사를 정규화한다. 일반 문자열과 `List<String>` 필드 둘 다 적용한다.
+- Settings Bundle 규격에 없는 `KeyboardType=Default`를 제거해 한글 키보드를 포함한
+  시스템 기본 다국어 키보드를 사용한다.
+- 48개 자동 테스트와 빌드는 통과했으며, Home 세 테이블의 실기 재확인이 남았다.
 
 ### 4. 일부 텍스트 진입 경로의 동등성
 
