@@ -23,7 +23,11 @@ static int diagnostics_enabled;
 static int master_enabled = 1;
 static int images_enabled = 1;
 static int phone_subtitles_enabled = 1;
+static int api_assets_enabled;
 static char display_username[4096];
+static char localization_path[4096];
+static void *localization_blob;
+static size_t localization_blob_size;
 #ifndef HOSHIMI_TEXT_ONLY
 static void *unity_handle;
 typedef void (*AdvLoad)(void *, void *, void *, void *, const void *);
@@ -167,12 +171,78 @@ static void read_username_setting(void) {
   dlclose(cf);
 }
 
+struct LocalizationHeader {
+  char magic[8];
+  uint32_t version, count, entries, pool, units, size;
+};
+
+static int load_localization_index(void) {
+  if (!localization_path[0])
+    return 0;
+  FILE *file = fopen(localization_path, "rb");
+  if (!file || fseek(file, 0, SEEK_END)) {
+    if (file)
+      fclose(file);
+    return 0;
+  }
+  long length = ftell(file);
+  if (length < (long)sizeof(struct LocalizationHeader) ||
+      length > 16 * 1024 * 1024 || fseek(file, 0, SEEK_SET)) {
+    fclose(file);
+    return 0;
+  }
+  void *blob = malloc((size_t)length);
+  if (!blob) {
+    fclose(file);
+    return 0;
+  }
+  size_t read = fread(blob, 1, (size_t)length, file);
+  fclose(file);
+  const struct LocalizationHeader *header =
+      (const struct LocalizationHeader *)blob;
+  uint64_t entries_end = (uint64_t)header->entries +
+                         (uint64_t)header->count * sizeof(struct Translation);
+  uint64_t pool_end =
+      (uint64_t)header->pool + (uint64_t)header->units * sizeof(uint16_t);
+  if (read != (size_t)length || memcmp(header->magic, "HSLOC1", 6) ||
+      header->version != 1 || header->size != (uint32_t)length ||
+      header->entries != sizeof(*header) || entries_end != header->pool ||
+      pool_end != header->size) {
+    free(blob);
+    return 0;
+  }
+  localization_blob = blob;
+  localization_blob_size = (size_t)length;
+  record("LOCALIZATION INDEX: entries=%u bytes=%llu", header->count,
+         (unsigned long long)localization_blob_size);
+  return 1;
+}
+
+static const uint16_t *active_translation_pool(void) {
+  if (!localization_blob)
+    return translation_pool;
+  const struct LocalizationHeader *header =
+      (const struct LocalizationHeader *)localization_blob;
+  return (const uint16_t *)((const char *)localization_blob + header->pool);
+}
+
 static const struct Translation *lookup(const uint16_t *key, uint32_t length) {
-  unsigned low = 0, high = TRANSLATION_COUNT;
+  const struct Translation *items = translations;
+  const uint16_t *pool = translation_pool;
+  unsigned count = TRANSLATION_COUNT;
+  if (localization_blob) {
+    const struct LocalizationHeader *header =
+        (const struct LocalizationHeader *)localization_blob;
+    items = (const struct Translation *)((const char *)localization_blob +
+                                         header->entries);
+    pool = (const uint16_t *)((const char *)localization_blob + header->pool);
+    count = header->count;
+  }
+  unsigned low = 0, high = count;
   while (low < high) {
     unsigned mid = low + (high - low) / 2;
-    const struct Translation *t = translations + mid;
-    const uint16_t *candidate = translation_pool + t->key;
+    const struct Translation *t = items + mid;
+    const uint16_t *candidate = pool + t->key;
     uint32_t n = length < t->key_len ? length : t->key_len;
     int order = 0;
     for (uint32_t i = 0; i < n; ++i) {
@@ -832,7 +902,8 @@ static void set_value_hook(void *self, void *key, void *value,
   }
   if (match) {
     void *translated =
-        string_new(translation_pool + match->value, (int32_t)match->value_len);
+        string_new(active_translation_pool() + match->value,
+                   (int32_t)match->value_len);
     if (translated) {
       unsigned hit = __atomic_add_fetch(&hits, 1, __ATOMIC_RELAXED);
       if (hit <= 24 || hit == 100 || hit == 1000) {
@@ -2636,6 +2707,7 @@ static void *username_notification_hook(void *self, void *name,
 
 #ifndef HOSHIMI_TEXT_ONLY
 #include "image_hook.h"
+#include "update.h"
 #endif
 
 static void image_added(const struct mach_header *header, intptr_t slide) {
@@ -2677,6 +2749,18 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
     if (prefix_length < 2048)
       snprintf(phone_path, sizeof(phone_path), "%.*s/HoshimiLocal/phone.bin",
                (int)prefix_length, info.dli_fname);
+    if (prefix_length < 2048)
+      snprintf(localization_path, sizeof(localization_path),
+               "%.*s/HoshimiLocal/localization.bin", (int)prefix_length,
+               info.dli_fname);
+    if (prefix_length < 2048) {
+      char embedded_root[4096];
+      int root_length = snprintf(embedded_root, sizeof(embedded_root),
+                                 "%.*s/HoshimiLocal", (int)prefix_length,
+                                 info.dli_fname);
+      if (root_length > 0 && (size_t)root_length < sizeof(embedded_root))
+        update_select_data_root(embedded_root);
+    }
   }
 #endif
   if (memcmp((void *)(base + HOSHIMI_TARGET_RVA), patched_entry_hex,
@@ -3022,6 +3106,8 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
     return;
   }
   armed = 1;
+  if (!load_localization_index())
+    record("LOCALIZATION FALLBACK: using IPA-compiled index");
   record("ARMED Qua.UI.I18n.SetValue rva=0x%llx entries=%u; waiting for calls",
          (unsigned long long)HOSHIMI_TARGET_RVA, TRANSLATION_COUNT);
 #ifndef HOSHIMI_TEXT_ONLY
@@ -3032,6 +3118,7 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
          "root=%s",
          (unsigned long long)HOSHIMI_ADV_TARGET_RVA,
          adv_root[0] ? adv_root : "<unavailable>");
+  update_start_if_enabled();
 #ifdef HOSHIMI_DISCOVERY
   if (!metadata_probe_started) {
     metadata_probe_started = 1;
@@ -3060,7 +3147,7 @@ __attribute__((constructor)) static void start(void) {
   record("Font activation disabled; Korean glyphs are expected to render as "
          "squares");
 #else
-  record("Hoshimi iOS hook v35: Android-style phone subtitles");
+  record("Hoshimi iOS hook v37: GitHub translation data updater");
   record("Static SourceSansPro-Regular OTF replacement expected in "
          "sharedassets0.assets");
 #endif
@@ -3069,15 +3156,21 @@ __attribute__((constructor)) static void start(void) {
   master_enabled = read_boolean_setting("useMasterTrans", 1);
   images_enabled = read_boolean_setting("replaceImages", 1);
   phone_subtitles_enabled = read_boolean_setting("usePhoneSubtitles", 1);
+  api_assets_enabled = read_boolean_setting("useAPIAssets", 0);
   read_username_setting();
   record("PATCH SETTING: HoshimiLocalifyEnabled=%s",
          patch_enabled ? "ON" : "OFF");
   record("DIAGNOSTICS SETTING: HoshimiDiagnosticsEnabled=%s",
          diagnostics_enabled ? "ON" : "OFF");
   record("FEATURE SETTINGS: useMasterTrans=%s replaceImages=%s "
-         "usePhoneSubtitles=%s",
+         "usePhoneSubtitles=%s useAPIAssets=%s",
          master_enabled ? "ON" : "OFF", images_enabled ? "ON" : "OFF",
-         phone_subtitles_enabled ? "ON" : "OFF");
+         phone_subtitles_enabled ? "ON" : "OFF",
+         api_assets_enabled ? "ON" : "OFF");
+#ifndef HOSHIMI_TEXT_ONLY
+  if (!api_assets_enabled)
+    update_write_setting("translationDataUpdateStatus", "자동 업데이트 꺼짐");
+#endif
   if (diagnostics_enabled) {
     record(
         "PATCH SUSPENDED: isolated diagnostics dylib will collect addresses");

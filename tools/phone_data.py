@@ -75,3 +75,16 @@ def compile_phone(root: Path):
         "bytes": len(blob),
         "scope": "sud_vo_phone clip timeline subtitles",
     }
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("root", type=Path)
+    parser.add_argument("output", type=Path)
+    args = parser.parse_args()
+    payload, details = compile_phone(args.root.resolve())
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_bytes(payload)
+    print(json.dumps(details, ensure_ascii=False, indent=2))

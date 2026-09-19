@@ -6,7 +6,7 @@ import plistlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from package_probe import collect_local_payload, LOCAL_DATA_ROOT
+from package_probe import collect_local_payload, LOCAL_DATA_ROOT, LOCALIZATION_INDEX_NAME
 
 
 def sample_image():
@@ -41,6 +41,10 @@ class HeaderInjectionTests(unittest.TestCase):
         self.assertEqual(toggle["Type"], "PSToggleSwitchSpecifier")
         for key in ("useMasterTrans", "replaceImages", "usePhoneSubtitles"):
             self.assertIs(toggles[key]["DefaultValue"], True)
+        self.assertIs(toggles["useAPIAssets"]["DefaultValue"], False)
+        for key in ("currentTranslationDataVersion", "latestTranslationDataVersion",
+                    "translationDataUpdateStatus"):
+            self.assertEqual(toggles[key]["Type"], "PSTitleValueSpecifier")
         diagnostics = toggles["HoshimiDiagnosticsEnabled"]
         self.assertEqual(diagnostics["Key"], "HoshimiDiagnosticsEnabled")
         self.assertIs(diagnostics["DefaultValue"], False)

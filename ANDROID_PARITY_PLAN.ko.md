@@ -22,6 +22,7 @@ iOS v29 소스에는 다음 기능이 들어 있다.
 | MasterDB 사용 스위치 | 구현 | 실제 Master 훅과 연결됨 |
 | 이미지 교체 스위치 | v30 실기 확인 | 네 이미지 훅 및 PNG 836개와 연결 |
 | 전화 자막 스위치 | v35 실기 확인 | 원본 514개 키 중 실제 자막 361클립·4,382줄 및 여섯 정적 훅과 연결 |
+| API 번역 데이터 업데이트 | v37 구현, 실기 확인 대기 | Android와 같은 GitHub Latest Release API·`useAPIAssets` 설정 사용 |
 
 `master.bin`과 `generic.bin`은 Android JSON을 다른 방식으로 새로 해석한 데이터가 아니다.
 Android 서브레포의 같은 JSON을 IPA 빌드 시 읽기 전용 인덱스로 바꾼 것이다. 데이터 출처와
@@ -101,7 +102,18 @@ AudioSource 다섯 진입점에서 `sud_vo_phone` 클립만 추적하고, 재생
   한글 닉네임은 다른 입력란에서 복사해 설정 필드에 붙여넣는다.
 - Home 세 테이블을 포함한 사용자명 치환과 조사 처리를 사용자 기기에서 확인했다.
 
-### 4. 일부 텍스트 진입 경로의 동등성
+### 4. 번역 데이터 자동 업데이트 — v37 구현, 실기 확인 대기
+
+- Android와 같은 GitHub Latest Release API에서 `tag_name`과 첫 ZIP 자산을 읽는다.
+- `useAPIAssets`가 켜진 경우에만 Unity 초기화 후 백그라운드에서 확인한다.
+- Release ZIP은 기존 `local-files`와 함께 iOS용 네 바이너리 인덱스를 `ios-data`에 포함한다.
+- ZIP 경로, 크기, 압축 형식, 내부 `version.txt`, 네 필수 인덱스를 검증한다.
+- 버전별 앱 데이터 디렉터리에 풀고 완료 표식을 마지막에 기록하므로 중단된 업데이트는 선택하지 않는다.
+- 새 데이터는 다음 실행부터 localization·MasterDB·generic·전화 자막·ADV·이미지에 함께 적용한다.
+- Settings Bundle에 현재 버전, 최신 버전, 업데이트 상태를 표시한다.
+- 외부 데이터가 없거나 손상되면 IPA 내장 데이터를 그대로 사용한다.
+
+### 5. 일부 텍스트 진입 경로의 동등성
 
 iOS는 현재 `TMP_Text.set_text`, `SetText(String,Boolean)`, 문자열
 `PopulateTextBackingArray`, `SetCharArray`, UIElements `TextField`, Legacy `UI.Text`를

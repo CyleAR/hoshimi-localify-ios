@@ -22,6 +22,7 @@ APP_ID_NAME = "IdolyPrideKR"
 PROBE_BUNDLE_ID = DEFAULT_BUNDLE_ID + ".probe"
 SETTINGS_ROOT = APP + "Settings.bundle/Root.plist"
 LOCAL_DATA_ROOT = APP + "HoshimiLocal/"
+LOCALIZATION_INDEX_NAME = LOCAL_DATA_ROOT + "localization.bin"
 GENERIC_INDEX_NAME = LOCAL_DATA_ROOT + "generic.bin"
 PHONE_INDEX_NAME = LOCAL_DATA_ROOT + "phone.bin"
 MASTER_INDEX_NAME = LOCAL_DATA_ROOT + "master.bin"
@@ -90,6 +91,37 @@ def settings_plist():
                 "IsSecure": False,
                 "AutocapitalizationType": "None",
                 "AutocorrectionType": "No",
+            },
+            {
+                "Type": "PSGroupSpecifier",
+                "Title": "번역 데이터 업데이트",
+                "FooterText": "새 데이터는 백그라운드에서 내려받고 다음 실행부터 적용됩니다. 버전 표시는 설정 화면을 다시 열면 갱신됩니다.",
+            },
+            {
+                "Type": "PSToggleSwitchSpecifier",
+                "Title": "API로 업데이트",
+                "Key": "useAPIAssets",
+                "DefaultValue": False,
+                "TrueValue": True,
+                "FalseValue": False,
+            },
+            {
+                "Type": "PSTitleValueSpecifier",
+                "Title": "현재 번역 데이터 버전",
+                "Key": "currentTranslationDataVersion",
+                "DefaultValue": "확인 전",
+            },
+            {
+                "Type": "PSTitleValueSpecifier",
+                "Title": "새 번역 데이터 버전",
+                "Key": "latestTranslationDataVersion",
+                "DefaultValue": "확인 전",
+            },
+            {
+                "Type": "PSTitleValueSpecifier",
+                "Title": "업데이트 상태",
+                "Key": "translationDataUpdateStatus",
+                "DefaultValue": "확인 전",
             },
             {
                 "Type": "PSGroupSpecifier",
@@ -252,6 +284,11 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
     generic_details = None
     phone_blob = None
     phone_details = None
+    localization_blob = None
+    localization_details = None
+    if include_adv or include_master or include_images or include_phone_subtitles:
+        from localization_data import compile_localization
+        localization_blob, localization_details = compile_localization(local_data_root.resolve())
     if include_master:
         from master_data import compile_master
         master_blob, master_details = compile_master(local_data_root.resolve())
@@ -338,7 +375,8 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
                 "bytes": sum(path.stat().st_size for _, path in local_payload) +
                          (len(master_blob) if master_blob else 0) +
                          (len(generic_blob) if generic_blob else 0) +
-                         (len(phone_blob) if phone_blob else 0),
+                         (len(phone_blob) if phone_blob else 0) +
+                         (len(localization_blob) if localization_blob else 0),
                 "source": "hoshimi-local",
             }
             if master_details:
@@ -347,6 +385,8 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
                 report["local_data"]["generic_index"] = generic_details
             if phone_details:
                 report["local_data"]["phone_index"] = phone_details
+            if localization_details:
+                report["local_data"]["localization_index"] = localization_details
         if hook_plan:
             report.update({"hook": hook_plan, "font_replaced": False})
         if font_details:
@@ -391,6 +431,9 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
             if generic_blob:
                 dst.writestr(GENERIC_INDEX_NAME, generic_blob,
                              compress_type=zipfile.ZIP_DEFLATED, compresslevel=6)
+            if localization_blob:
+                dst.writestr(LOCALIZATION_INDEX_NAME, localization_blob,
+                             compress_type=zipfile.ZIP_DEFLATED, compresslevel=6)
             if phone_blob:
                 dst.writestr(PHONE_INDEX_NAME, phone_blob,
                              compress_type=zipfile.ZIP_DEFLATED, compresslevel=6)
@@ -411,6 +454,8 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
             raise ValueError("Embedded MasterDB index mismatch")
         if generic_blob and check.read(GENERIC_INDEX_NAME) != generic_blob:
             raise ValueError("Embedded generic index mismatch")
+        if localization_blob and check.read(LOCALIZATION_INDEX_NAME) != localization_blob:
+            raise ValueError("Embedded localization index mismatch")
         if phone_blob and check.read(PHONE_INDEX_NAME) != phone_blob:
             raise ValueError("Embedded phone subtitle index mismatch")
     report["output_sha256"] = hashlib.sha256(output.read_bytes()).hexdigest()
