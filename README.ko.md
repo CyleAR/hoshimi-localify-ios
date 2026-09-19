@@ -7,15 +7,22 @@ Android 참고 구현은 `../hoshimi-localify-android/app/src/main/cpp/HoshimiLo
 
 2026-09-15: 사용자가 SideStore + iLoader로 복호화된 IDOLY PRIDE 6.0.2의 설치와 실행에 성공했다. 기존 Android의 IL2CPP 번역 훅·JSON 데이터와 폰트 자산 교체를 이식한다. AstralParty/프로토버프 방식은 사용하지 않는다.
 
-## 현재 결과물: Hook v33 (다국어 닉네임 입력 수정)
+## 현재 결과물: Hook v35 (통화 자막 실기 확인)
 
 사용자 기기에서 v18의 화면·폰트·ADV 번역이 확인됐다. v23은 ADV 원문 파일에는 괄호 치환만 적용하고, Android와 같은 generic 텍스트 보정 단계에서 조사·대시·문장부호를 처리한다. 검증된 `Google.Protobuf.MessageExtensions.MergeFrom` 뒤에서 MasterDB의 직접 필드와 중첩 객체·배열을 모두 적용한다. 정적 폰트 경로는 교체한 `SourceSansPro-Regular`를 런타임에서 찾아 Android 방식으로 활성화하고, 모든 TMP 폰트의 폴백 목록에 등록한다. v29는 generic 분할 검색이 원문을 출력한 뒤 호출자가 다시 원문을 붙이던 중복 버그를 수정했다. 정적 게이트웨이 자체가 원인이라는 이전 판단은 잘못이었다. 제공된 Dobby는 디버거 스크립트가 처리하는 BRK 명령을 포함하므로 일반 IPA 실행 경로에서 제거했다. 여섯 텍스트 훅은 정적 게이트웨이로 연결하며, 부분 문자열도 Android처럼 지정 범위만 번역한다. 2026-09-16 사용자가 v29 설치 후 정상 실행과 문제없음을 확인했다. 이후 기능 추가의 성공 기준선으로 보존한다.
 
 
 
-v33은 Settings Bundle의 닉네임 필드에 잘못 지정된 `KeyboardType=Default`를 제거해
-iPadOS 설정 앱이 시스템 기본 다국어 키보드를 사용하게 한다. 한글 입력과 저장 경로는
-패키지 테스트로 검증한다.
+v35는 Android와 같은 `phoneSubtitles.json`의 514개 키·4,681개 행을 검증한다. Android처럼
+빈 번역을 제외한 실제 자막 361클립·4,382줄을 `phone.bin`으로
+컴파일해 내장한다. AudioSource의 Play·지연 재생·OneShot과 클립 설정을 정적 훅으로 추적하고,
+`EndCameraRendering`에서 재생 위치에 맞는 줄을 선택한다. 전화 화면의 `TalkTime` TMP에
+자막과 통화 시간을 함께 표시하며 `전화 자막 사용`을 끄면 관련 훅을 연결하지 않는다.
+2026-09-19 사용자가 실제 통화에서 자막 표시와 시간 동기화가 정상 동작함을 확인했다.
+
+v33은 Settings Bundle의 닉네임 필드에서 `displayUserName`을 저장한다. iPadOS의
+`PSTextFieldSpecifier`는 다국어 기본 키보드를 선택할 수 없으므로 한글은 다른 입력란에서
+복사해 붙여넣는다. 저장된 유니코드 문자열과 게임 내 치환 경로는 실기에서 확인했다.
 
 v32는 v31의 사용자명 치환을 MasterDB 필드 적용 단계에도 추가했다.
 HomeAction·HomeTalk·HomeTalkCall처럼 공통 UI 문자열 훅을 거치지 않는 테이블도
@@ -34,9 +41,9 @@ generic function index 20631에서 `0x4847624`를 확인했다. 빌드 시 이 �
 메시지 주소는 `0x2760008`, 알림 주소는 `0x275fdc0`이다.
 Android와 같은 부모 getter를 연결하며 `LoveADVEnginePresenter`가 별도로 오버라이드한 getter는 이번 범위에 포함하지 않는다.
 
-48개 테스트와 ARM64 빌드가 통과했다. 실기에서는 이름 공란/입력 후 재시작, 일반 ADV,
-메시지·알림 및 `민준은`/`유나는` 같은 조사 결과를 확인한다. v29·v30의 정상 동작은 이전 실기에서 확인됐지만
-v31의 새 사용자명 경로는 아직 실기 확인 전이다.
+53개 테스트와 ARM64 빌드가 통과했다. v33까지의 번역·폰트·ADV·MasterDB·generic·이미지·사용자명은
+성공 기준선 커밋 `07b735b`로 보존한다. v35의 실제 통화 자막 표시와 시간 동기화도 사용자 기기에서
+확인했다.
 
 v30은 Android `resource/img`의 PNG 836개를 포함하고 `Image.set_sprite`,
 `Image.set_overrideSprite`, `RawImage.set_texture`, `Graphic.OnEnable`을 정적으로 연결한다.
@@ -75,7 +82,7 @@ Unity API를 모의 구현한 ARM64 이미지 테스트와 기존 회귀 테스�
 ```powershell
 chcp 65001 > $null
 ./build-hook.ps1
-python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --include-images --patch-revision 33 --output build/IdolyPride-6.0.2-HoshimiHook-v33.ipa
+python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --include-images --include-phone-subtitles --patch-revision 35 --output build/IdolyPride-6.0.2-HoshimiHook-v35.ipa
 ```
 
 출력 IPA가 이미 있으면 새 이름을 지정한다. 원본 IPA는 변경하지 않는다.

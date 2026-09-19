@@ -77,6 +77,17 @@ class HeaderInjectionTests(unittest.TestCase):
             self.assertEqual(generic_details["exact"], 1)
             self.assertEqual(generic_details["translated"], 2)
 
+    def test_phone_payload_keeps_json_outside_archive(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "version.txt").write_text("20260919", encoding="utf-8")
+            phone = root / "local-files" / "phoneSubtitles.json"
+            phone.parent.mkdir(parents=True)
+            phone.write_text('{"sud_vo_phone_test": [{"time": 0, "text": "자막"}]}',
+                             encoding="utf-8")
+            payload = collect_local_payload(root, include_phone_subtitles=True)
+            self.assertEqual([name for name, _ in payload], [LOCAL_DATA_ROOT + "version.txt"])
+
     def test_image_payload_is_opt_in_and_preserves_resource_paths(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

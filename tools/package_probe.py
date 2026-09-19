@@ -23,6 +23,7 @@ PROBE_BUNDLE_ID = DEFAULT_BUNDLE_ID + ".probe"
 SETTINGS_ROOT = APP + "Settings.bundle/Root.plist"
 LOCAL_DATA_ROOT = APP + "HoshimiLocal/"
 GENERIC_INDEX_NAME = LOCAL_DATA_ROOT + "generic.bin"
+PHONE_INDEX_NAME = LOCAL_DATA_ROOT + "phone.bin"
 MASTER_INDEX_NAME = LOCAL_DATA_ROOT + "master.bin"
 DOBBY_NAME = "libdobby.dylib"
 DOBBY_ARCHIVE_NAME = APP + "Frameworks/" + DOBBY_NAME
@@ -106,9 +107,10 @@ def settings_plist():
     }, fmt=plistlib.FMT_BINARY)
 
 
-def collect_local_payload(root, include_adv=False, include_master=False, include_images=False):
+def collect_local_payload(root, include_adv=False, include_master=False, include_images=False,
+                          include_phone_subtitles=False):
     """Select files directly from the hoshimi-local checkout without rewriting them."""
-    if not include_adv and not include_master and not include_images:
+    if not include_adv and not include_master and not include_images and not include_phone_subtitles:
         return []
     root = root.resolve()
     version = root / "version.txt"
@@ -215,7 +217,8 @@ def add_load_dylib(data, name):
 
 def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=None,
             local_data_root=None, include_adv=False, include_master=False,
-            patch_revision=None, dobby_path=None, include_images=False):
+            patch_revision=None, dobby_path=None, include_images=False,
+            include_phone_subtitles=False):
     if output.exists() or output.with_suffix(".report.json").exists():
         raise ValueError("Output already exists; choose a new output filename")
     if bundle_id != DEFAULT_BUNDLE_ID and not bundle_id.startswith("game.qualiarts.idolypride."):
@@ -238,20 +241,26 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
         for symbol in DOBBY_REQUIRED_EXPORTS:
             if symbol not in dobby:
                 raise ValueError(f"Dobby payload is missing required export: {symbol[:-1].decode()}")
-    if (include_adv or include_master or include_images) and not local_data_root:
+    if (include_adv or include_master or include_images or include_phone_subtitles) and not local_data_root:
         raise ValueError("--local-data-root is required when embedding translation data")
-    local_payload = collect_local_payload(local_data_root, include_adv, include_master, include_images) \
+    local_payload = collect_local_payload(local_data_root, include_adv, include_master, include_images,
+                                          include_phone_subtitles) \
         if local_data_root else []
     master_blob = None
     master_details = None
     generic_blob = None
     generic_details = None
+    phone_blob = None
+    phone_details = None
     if include_master:
         from master_data import compile_master
         master_blob, master_details = compile_master(local_data_root.resolve())
     if include_adv or include_master:
         from generic_data import compile_generic
         generic_blob, generic_details = compile_generic(local_data_root.resolve())
+    if include_phone_subtitles:
+        from phone_data import compile_phone
+        phone_blob, phone_details = compile_phone(local_data_root.resolve())
     hook_plan = json.loads(hook_plan_path.read_text(encoding="utf-8")) if hook_plan_path else None
     library_name = "HoshimiLocalify.dylib" if hook_plan else LIBRARY_NAME
     load_path = "@loader_path/../" + library_name
@@ -323,17 +332,21 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
                 "adv": include_adv,
                 "images": include_images,
                 "master": include_master,
+                "phone_subtitles": include_phone_subtitles,
                 "generic": bool(generic_blob),
                 "files": len(local_payload),
                 "bytes": sum(path.stat().st_size for _, path in local_payload) +
                          (len(master_blob) if master_blob else 0) +
-                         (len(generic_blob) if generic_blob else 0),
+                         (len(generic_blob) if generic_blob else 0) +
+                         (len(phone_blob) if phone_blob else 0),
                 "source": "hoshimi-local",
             }
             if master_details:
                 report["local_data"]["master_index"] = master_details
             if generic_details:
                 report["local_data"]["generic_index"] = generic_details
+            if phone_details:
+                report["local_data"]["phone_index"] = phone_details
         if hook_plan:
             report.update({"hook": hook_plan, "font_replaced": False})
         if font_details:
@@ -378,6 +391,9 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
             if generic_blob:
                 dst.writestr(GENERIC_INDEX_NAME, generic_blob,
                              compress_type=zipfile.ZIP_DEFLATED, compresslevel=6)
+            if phone_blob:
+                dst.writestr(PHONE_INDEX_NAME, phone_blob,
+                             compress_type=zipfile.ZIP_DEFLATED, compresslevel=6)
             dst.writestr(APP + "hoshimi-probe.json", json.dumps(report, indent=2))
     with zipfile.ZipFile(output) as check:
         if check.testzip() is not None or check.read(UNITY) != unity:
@@ -395,6 +411,8 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
             raise ValueError("Embedded MasterDB index mismatch")
         if generic_blob and check.read(GENERIC_INDEX_NAME) != generic_blob:
             raise ValueError("Embedded generic index mismatch")
+        if phone_blob and check.read(PHONE_INDEX_NAME) != phone_blob:
+            raise ValueError("Embedded phone subtitle index mismatch")
     report["output_sha256"] = hashlib.sha256(output.read_bytes()).hexdigest()
     output.with_suffix(".report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))
@@ -417,6 +435,8 @@ if __name__ == "__main__":
                         help="Compile and embed all local-files/masterTrans translations")
     parser.add_argument("--include-images", action="store_true",
                         help="Embed Android replacement images from resource/img")
+    parser.add_argument("--include-phone-subtitles", action="store_true",
+                        help="Compile and embed local-files/phoneSubtitles.json")
     parser.add_argument("--patch-revision", type=int,
                         help="Use 141.<revision> as CFBundleVersion so iOS treats it as an update")
     parser.add_argument("--dobby", type=Path,
@@ -424,4 +444,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     package(args.ipa, args.dylib, args.output, args.bundle_id, args.hook_plan, args.font_file,
             args.local_data_root, args.include_adv, args.include_master, args.patch_revision,
-            args.dobby, args.include_images)
+            args.dobby, args.include_images, args.include_phone_subtitles)

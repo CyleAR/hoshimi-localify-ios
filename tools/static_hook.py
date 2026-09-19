@@ -31,6 +31,14 @@ USERNAME_SITES = (
     ("username_message", 0x2760008, bytes.fromhex("f657bda9f44f01a9fd7b02a9fd830091")),
     ("username_notification", 0x275FDC0, bytes.fromhex("f657bda9f44f01a9fd7b02a9fd830091")),
 )
+PHONE_SITES = (
+    ("audio_play", 0x77D1554, bytes.fromhex("f44fbea9fd7b01a9fd430091738a01f0")),
+    ("audio_play_u64", 0x77D15AC, bytes.fromhex("f657bda9f44f01a9fd7b02a9fd830091")),
+    ("audio_delayed", 0x77D1610, bytes.fromhex("e923bd6df44f01a9fd7b02a9fd830091")),
+    ("audio_oneshot", 0x77D16F0, bytes.fromhex("e923bc6df65701a9f44f02a9fd7b03a9")),
+    ("audio_set_clip", 0x77D143C, bytes.fromhex("f657bda9f44f01a9fd7b02a9fd830091")),
+    ("render_end", 0x7874178, bytes.fromhex("f657bda9f44f01a9fd7b02a9fd830091")),
+)
 MODULE = 0x9DEEB28
 TOKEN_ROW = 0x26F
 HELPER_ROW = 0x27E
@@ -62,7 +70,7 @@ def gateway(cave, slot, target, displaced):
                           MASTER_EXPECTED[:4], TMP_SET_TEXT_EXPECTED[:4],
                           TMP_POPULATE_EXPECTED[:4], TMP_SETTEXT_BOOL_EXPECTED[:4],
                           TMP_SETCHARARRAY_EXPECTED[:4], TEXTFIELD_EXPECTED[:4],
-                          UI_TEXT_EXPECTED[:4], *(site[2][:4] for site in IMAGE_SITES + USERNAME_SITES)):
+                          UI_TEXT_EXPECTED[:4], *(site[2][:4] for site in IMAGE_SITES + USERNAME_SITES + PHONE_SITES)):
         raise ValueError("Unsupported displaced instruction")
     page_delta = (slot >> 12) - (cave >> 12)
     if not -(1 << 20) <= page_delta < (1 << 20):
@@ -146,6 +154,20 @@ def plan(data):
     for row, expected in ((0x1b3cf, 0x275fdc0), (0x1b3d0, 0x2760008)):
         if struct.unpack_from("<Q", data, 169990024 + 8 * (row - 1))[0] != expected:
             raise ValueError("Message username codegen pointer mismatch")
+    audio_name, audio_count, audio_table = struct.unpack_from("<3Q", data, 0x9E19500)
+    if (audio_name, audio_count, audio_table) != (0x93C5593, 0xDD, 0xA788D08):
+        raise ValueError("UnityEngine.AudioModule codegen module mismatch")
+    audio_rows = ((0x16, 0x77CF84C), (0x50, 0x77D1284), (0x54, 0x77D13EC),
+                  (0x55, 0x77D143C), (0x58, 0x77D1554), (0x59, 0x77D15AC),
+                  (0x5A, 0x77D1610), (0x5D, 0x77D16F0))
+    for row, expected in audio_rows:
+        if struct.unpack_from("<Q", data, audio_table + 8 * (row - 1))[0] != expected:
+            raise ValueError("Audio codegen pointer mismatch")
+    core_name, core_count, core_table = struct.unpack_from("<3Q", data, 0x9E19610)
+    if (core_name, core_count, core_table) != (0x938BAA1, 0x1575, 0xA789708):
+        raise ValueError("UnityEngine.CoreModule codegen module mismatch")
+    if struct.unpack_from("<Q", data, core_table + 8 * (0x12E8 - 1))[0] != 0x7874178:
+        raise ValueError("EndCameraRendering codegen pointer mismatch")
     text_sites = [
         ("tmp_set_text", TMP_SET_TEXT_TARGET, TMP_SET_TEXT_EXPECTED),
         ("tmp_populate", TMP_POPULATE_TARGET, TMP_POPULATE_EXPECTED),
@@ -154,7 +176,7 @@ def plan(data):
         ("textfield", TEXTFIELD_TARGET, TEXTFIELD_EXPECTED),
         ("ui_text", UI_TEXT_TARGET, UI_TEXT_EXPECTED),
     ]
-    text_sites.extend(IMAGE_SITES + USERNAME_SITES)
+    text_sites.extend(IMAGE_SITES + USERNAME_SITES + PHONE_SITES)
     for name, target, expected in text_sites:
         if data[target:target + len(expected)] != expected:
             raise ValueError(f"Unexpected {name} prologue")
@@ -252,7 +274,7 @@ def patch(data, expected_plan):
     # Offline gateways keep executable pages unchanged at runtime (no JIT).
     for name in ("tmp_set_text", "tmp_populate", "tmp_settext_bool",
                  "tmp_setchararray", "textfield", "ui_text",
-                 *(site[0] for site in IMAGE_SITES + USERNAME_SITES)):
+                 *(site[0] for site in IMAGE_SITES + USERNAME_SITES + PHONE_SITES)):
         cave = actual[f"{name}_cave_rva"]
         code = bytes.fromhex(actual[f"{name}_gateway_hex"])
         target = actual[f"{name}_target_rva"]

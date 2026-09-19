@@ -37,12 +37,15 @@ static MasterMerge original_master_merge;
 static ClassGetName class_get_name;
 static char master_path[4096];
 static char generic_path[4096];
+static char phone_path[4096];
 static void *master_blob;
 static size_t master_blob_size;
 static unsigned master_calls, master_hits;
 static void *generic_blob;
 static size_t generic_blob_size;
 static unsigned generic_calls, generic_hits;
+static void *phone_blob;
+static size_t phone_blob_size;
 
 typedef void (*TmpSetText)(void *, void *, const void *);
 typedef void (*TmpSetTextBool)(void *, void *, uint8_t, const void *);
@@ -55,6 +58,25 @@ static TmpSetTextBool original_tmp_settext_bool;
 static TmpSetCharArray original_tmp_setchararray;
 static UiSetText original_textfield_set_value;
 static UiSetText original_ui_text_set_text;
+
+typedef void (*AudioPlay)(void *, const void *);
+typedef void (*AudioPlayUInt64)(void *, uint64_t, const void *);
+typedef void (*AudioPlayDelayed)(void *, float, const void *);
+typedef void (*AudioPlayOneShot)(void *, void *, float, const void *);
+typedef void (*AudioSetClip)(void *, void *, const void *);
+typedef void (*RenderEnd)(void *, void *, const void *);
+typedef void *(*AudioGetClip)(void *, const void *);
+typedef float (*AudioGetFloat)(void *, const void *);
+typedef float (*TimeGetFloat)(const void *);
+static AudioPlay original_audio_play;
+static AudioPlayUInt64 original_audio_play_u64;
+static AudioPlayDelayed original_audio_delayed;
+static AudioPlayOneShot original_audio_oneshot;
+static AudioSetClip original_audio_set_clip;
+static RenderEnd original_render_end;
+static AudioGetClip audio_get_clip;
+static AudioGetFloat audio_get_time, audio_clip_get_length;
+static TimeGetFloat time_get_realtime;
 static int append_managed_utf8(char *output, size_t capacity, size_t *used,
                                void *value);
 static void *method_entry(const void *method);
@@ -1589,6 +1611,342 @@ static void generic_apply_center_layout(void *owner) {
   }
 }
 
+struct PhoneHeader {
+  char magic[8];
+  uint32_t version, clips, lines, clip_offset, line_offset, pool_offset,
+      pool_size;
+};
+struct PhoneClip {
+  uint32_t name, first_line, line_count;
+};
+struct PhoneLine {
+  float time;
+  uint32_t text;
+};
+struct ActivePhoneSubtitle {
+  const struct PhoneClip *clip;
+  void *source;
+  float start_time;
+  float clip_length;
+  int32_t current_index;
+};
+static struct ActivePhoneSubtitle active_phone;
+static const char *current_phone_text;
+static void *styled_phone_timer;
+static unsigned phone_starts, phone_lines, phone_timer_hits;
+
+static const char *phone_string(const struct PhoneHeader *header,
+                                uint32_t offset) {
+  if (!header || offset >= header->pool_size ||
+      header->pool_offset > phone_blob_size ||
+      header->pool_size > phone_blob_size - header->pool_offset)
+    return 0;
+  const char *value = (const char *)phone_blob + header->pool_offset + offset;
+  const char *end = (const char *)phone_blob + header->pool_offset +
+                    header->pool_size;
+  for (const char *p = value; p < end; ++p)
+    if (!*p)
+      return value;
+  return 0;
+}
+
+static int load_phone_index(void) {
+  if (!phone_path[0])
+    return 0;
+  FILE *file = fopen(phone_path, "rb");
+  if (!file || fseek(file, 0, SEEK_END)) {
+    if (file)
+      fclose(file);
+    return 0;
+  }
+  long length = ftell(file);
+  if (length < (long)sizeof(struct PhoneHeader) || length > 8 * 1024 * 1024 ||
+      fseek(file, 0, SEEK_SET)) {
+    fclose(file);
+    return 0;
+  }
+  void *blob = malloc((size_t)length);
+  if (!blob) {
+    fclose(file);
+    return 0;
+  }
+  size_t read = fread(blob, 1, (size_t)length, file);
+  fclose(file);
+  if (read != (size_t)length) {
+    free(blob);
+    return 0;
+  }
+  const struct PhoneHeader *header = (const struct PhoneHeader *)blob;
+  uint64_t clips_end =
+      (uint64_t)header->clip_offset +
+      (uint64_t)header->clips * sizeof(struct PhoneClip);
+  uint64_t lines_end =
+      (uint64_t)header->line_offset +
+      (uint64_t)header->lines * sizeof(struct PhoneLine);
+  uint64_t pool_end = (uint64_t)header->pool_offset + header->pool_size;
+  if (memcmp(header->magic, "HSPHONE1", 8) || header->version != 1 ||
+      header->clip_offset != sizeof(*header) ||
+      clips_end != header->line_offset || lines_end != header->pool_offset ||
+      pool_end != (uint64_t)length || !header->clips || !header->lines) {
+    free(blob);
+    return 0;
+  }
+  phone_blob = blob;
+  phone_blob_size = (size_t)length;
+  record("PHONE INDEX: clips=%u lines=%u bytes=%llu", header->clips,
+         header->lines, (unsigned long long)phone_blob_size);
+  return 1;
+}
+
+static const struct PhoneClip *phone_find_clip(const char *name) {
+  if (!phone_blob || !name)
+    return 0;
+  const struct PhoneHeader *header = (const struct PhoneHeader *)phone_blob;
+  const struct PhoneClip *clips = (const struct PhoneClip *)(
+      (const char *)phone_blob + header->clip_offset);
+  uint32_t low = 0, high = header->clips;
+  while (low < high) {
+    uint32_t mid = low + (high - low) / 2;
+    const char *candidate = phone_string(header, clips[mid].name);
+    if (!candidate)
+      return 0;
+    int order = strcmp(name, candidate);
+    if (!order)
+      return clips + mid;
+    if (order < 0)
+      high = mid;
+    else
+      low = mid + 1;
+  }
+  return 0;
+}
+
+static int managed_utf8(void *value, char *output, size_t capacity) {
+  if (!value || !output || !capacity || !string_length || !string_chars)
+    return 0;
+  int32_t units = string_length(value);
+  if (units < 0 || (size_t)units > (capacity - 1) / 4)
+    return 0;
+  size_t used = 0;
+  if (!append_managed_utf8(output, capacity, &used, value))
+    return 0;
+  output[used] = 0;
+  return 1;
+}
+
+static void clear_phone_subtitle(void) {
+  active_phone.clip = 0;
+  active_phone.source = 0;
+  active_phone.current_index = -1;
+  current_phone_text = 0;
+  styled_phone_timer = 0;
+}
+
+static void start_phone_subtitle(void *source, void *clip, float delay) {
+  if (!phone_subtitles_enabled || !phone_blob || !time_get_realtime)
+    return;
+  if (!clip && audio_get_clip)
+    clip = audio_get_clip(source, 0);
+  char name[512];
+  void *managed_name = clip && font_get_name ? font_get_name(clip, 0) : 0;
+  if (!managed_utf8(managed_name, name, sizeof(name)) ||
+      strlen(name) < 12 || memcmp(name, "sud_vo_phone", 12))
+    return;
+  const struct PhoneClip *entry = phone_find_clip(name);
+  if (!entry) {
+    clear_phone_subtitle();
+    if (phone_starts < 12)
+      record("PHONE NO DATA: clip=%s", name);
+    return;
+  }
+  active_phone.clip = entry;
+  active_phone.source = source;
+  active_phone.start_time = time_get_realtime(0) + (delay > 0 ? delay : 0);
+  active_phone.clip_length =
+      clip && audio_clip_get_length ? audio_clip_get_length(clip, 0) : 0;
+  active_phone.current_index = -1;
+  current_phone_text = 0;
+  styled_phone_timer = 0;
+  ++phone_starts;
+  record("PHONE START: clip=%s lines=%u delay=%.2f length=%.2f", name,
+         entry->line_count, delay, active_phone.clip_length);
+}
+
+static void update_phone_subtitle(void) {
+  if (!phone_subtitles_enabled || !active_phone.clip || !time_get_realtime)
+    return;
+  float realtime = time_get_realtime(0) - active_phone.start_time;
+  if (realtime < 0) {
+    current_phone_text = 0;
+    return;
+  }
+  if (active_phone.clip_length > 0 &&
+      realtime > active_phone.clip_length + 1.5f) {
+    clear_phone_subtitle();
+    return;
+  }
+  float elapsed = audio_get_time && active_phone.source
+                      ? audio_get_time(active_phone.source, 0)
+                      : realtime;
+  if (elapsed < 0)
+    elapsed = realtime;
+  const struct PhoneHeader *header = (const struct PhoneHeader *)phone_blob;
+  if (active_phone.clip->first_line > header->lines ||
+      active_phone.clip->line_count >
+          header->lines - active_phone.clip->first_line) {
+    clear_phone_subtitle();
+    return;
+  }
+  const struct PhoneLine *lines = (const struct PhoneLine *)(
+      (const char *)phone_blob + header->line_offset) +
+                                  active_phone.clip->first_line;
+  int32_t next = -1;
+  for (uint32_t i = 0; i < active_phone.clip->line_count; ++i) {
+    if (lines[i].time <= elapsed)
+      next = (int32_t)i;
+    else
+      break;
+  }
+  if (next < 0) {
+    current_phone_text = 0;
+    return;
+  }
+  if (next != active_phone.current_index) {
+    const char *text = phone_string(header, lines[next].text);
+    if (!text) {
+      clear_phone_subtitle();
+      return;
+    }
+    active_phone.current_index = next;
+    current_phone_text = text;
+    ++phone_lines;
+    if (phone_lines <= 24 || phone_lines == 100 || phone_lines == 1000)
+      record("PHONE LINE: hit=%u index=%d time=%.2f", phone_lines, next,
+             lines[next].time);
+  }
+}
+
+static int is_phone_timer(void *owner, void *value) {
+  if (!owner || !value || !current_phone_text || !string_length ||
+      !string_chars || string_length(value) != 5)
+    return 0;
+  const uint16_t *text = string_chars(value);
+  if (!text || text[2] != ':' || text[0] < '0' || text[0] > '9' ||
+      text[1] < '0' || text[1] > '9' || text[3] < '0' || text[3] > '9' ||
+      text[4] < '0' || text[4] > '9')
+    return 0;
+  char name[128];
+  void *managed_name = font_get_name ? font_get_name(owner, 0) : 0;
+  return managed_utf8(managed_name, name, sizeof(name)) &&
+         !strcmp(name, "TalkTime");
+}
+
+static void phone_apply_timer_layout(void *owner) {
+  if (!owner || owner == styled_phone_timer || !font_object_class ||
+      !font_method_from_name)
+    return;
+  void *klass = font_object_class(owner);
+  const void *rich = klass ? font_method_from_name(klass, "set_richText", 1) : 0;
+  const void *alignment =
+      klass ? font_method_from_name(klass, "set_alignment", 1) : 0;
+  void *rich_entry = method_entry(rich);
+  void *alignment_entry = method_entry(alignment);
+  if (rich_entry) {
+    typedef void (*SetBool)(void *, uint8_t, const void *);
+    ((SetBool)rich_entry)(owner, 1, rich);
+  }
+  if (alignment_entry) {
+    typedef void (*SetInt)(void *, int32_t, const void *);
+    ((SetInt)alignment_entry)(owner, 1026, alignment);
+  }
+  styled_phone_timer = owner;
+}
+
+static void *phone_timer_string(void *owner, void *value) {
+  if (!is_phone_timer(owner, value) || !string_new_utf8)
+    return value;
+  phone_apply_timer_layout(owner);
+  size_t subtitle_length = strlen(current_phone_text);
+  if (subtitle_length > (((size_t)-1) - 4097) / 4)
+    return value;
+  size_t normalized_length = 0;
+  char *subtitle = normalize_text(current_phone_text, subtitle_length,
+                                  subtitle_length * 4 + 4097,
+                                  &normalized_length, 0);
+  if (!subtitle)
+    return value;
+  static const char single_prefix[] = "<size=85%><voffset=0.45em>";
+  static const char single_suffix[] = "</voffset></size>\n";
+  static const char multi_prefix[] = "<size=85%>";
+  static const char multi_suffix[] = "</size>\n";
+  int single = 1;
+  for (size_t i = 0; i < normalized_length; ++i)
+    if (subtitle[i] == '\n') {
+      single = 0;
+      break;
+    }
+  const char *prefix = single ? single_prefix : multi_prefix;
+  const char *suffix = single ? single_suffix : multi_suffix;
+  size_t needed = strlen(prefix) + normalized_length + strlen(suffix) + 5 + 1;
+  if (needed > 1024 * 1024) {
+    free(subtitle);
+    return value;
+  }
+  char *combined = (char *)malloc(needed);
+  if (!combined) {
+    free(subtitle);
+    return value;
+  }
+  size_t used = 0;
+  memcpy(combined + used, prefix, strlen(prefix));
+  used += strlen(prefix);
+  memcpy(combined + used, subtitle, normalized_length);
+  used += normalized_length;
+  memcpy(combined + used, suffix, strlen(suffix));
+  used += strlen(suffix);
+  const uint16_t *timer = string_chars(value);
+  for (int i = 0; i < 5; ++i)
+    combined[used++] = (char)timer[i];
+  combined[used] = 0;
+  void *result = string_new_utf8(combined);
+  free(combined);
+  free(subtitle);
+  if (result) {
+    ++phone_timer_hits;
+    if (phone_timer_hits <= 12)
+      record("PHONE TIMER: subtitle applied hit=%u", phone_timer_hits);
+    return result;
+  }
+  return value;
+}
+
+static void audio_play_hook(void *self, const void *method) {
+  start_phone_subtitle(self, 0, 0);
+  original_audio_play(self, method);
+}
+static void audio_play_u64_hook(void *self, uint64_t delay,
+                                const void *method) {
+  (void)delay;
+  start_phone_subtitle(self, 0, 0);
+  original_audio_play_u64(self, delay, method);
+}
+static void audio_delayed_hook(void *self, float delay, const void *method) {
+  start_phone_subtitle(self, 0, delay);
+  original_audio_delayed(self, delay, method);
+}
+static void audio_oneshot_hook(void *self, void *clip, float volume,
+                               const void *method) {
+  start_phone_subtitle(self, clip, 0);
+  original_audio_oneshot(self, clip, volume, method);
+}
+static void audio_set_clip_hook(void *self, void *clip, const void *method) {
+  original_audio_set_clip(self, clip, method);
+}
+static void render_end_hook(void *context, void *camera, const void *method) {
+  original_render_end(context, camera, method);
+  update_phone_subtitle();
+}
+
 static void *localized_managed_string(void *owner, void *value,
                                       int normalize_untranslated,
                                       int apply_layout, int *changed,
@@ -1694,6 +2052,11 @@ static void record_generic_call(void *original_value, void *localized_value,
 }
 
 static void tmp_set_text_hook(void *self, void *value, const void *method) {
+  void *phone_value = phone_timer_string(self, value);
+  if (phone_value != value) {
+    original_tmp_set_text(self, phone_value, method);
+    return;
+  }
   int changed = 0, translated = 0;
   void *localized =
       localized_managed_string(self, value, 1, 1, &changed, &translated);
@@ -1704,6 +2067,11 @@ static void tmp_set_text_hook(void *self, void *value, const void *method) {
 static __attribute__((unused)) void
 tmp_settext_bool_hook(void *self, void *value, uint8_t sync_text_input_box,
                       const void *method) {
+  void *phone_value = phone_timer_string(self, value);
+  if (phone_value != value) {
+    original_tmp_settext_bool(self, phone_value, sync_text_input_box, method);
+    return;
+  }
   int changed = 0, translated = 0;
   void *localized =
       localized_managed_string(self, value, 1, 1, &changed, &translated);
@@ -1724,6 +2092,12 @@ tmp_populate_text_hook(void *self, void *value, int32_t start, int32_t length,
       length <= original_length - start && string_new && string_chars) {
     if (start != 0 || length != original_length)
       source = string_new(string_chars(value) + start, length);
+    void *phone_value = phone_timer_string(self, source);
+    if (phone_value != source) {
+      original_tmp_populate_text(self, phone_value, 0,
+                                 string_length(phone_value), method);
+      return;
+    }
     localized =
         localized_managed_string(self, source, 1, 1, &changed, &translated);
   }
@@ -1753,7 +2127,12 @@ tmp_setchararray_hook(void *self, void *array, int32_t start, int32_t length,
   if (chars && chars->max_length <= 262144 && start >= 0 && length >= 0 &&
       (uintptr_t)start <= chars->max_length &&
       (uintptr_t)length <= chars->max_length - (uintptr_t)start && string_new) {
-    void *source = string_new(chars->vector + start, length);
+      void *source = string_new(chars->vector + start, length);
+      void *phone_value = phone_timer_string(self, source);
+      if (phone_value != source && original_tmp_set_text) {
+        original_tmp_set_text(self, phone_value, 0);
+        return;
+      }
     localized =
         localized_managed_string(self, source, 1, 1, &changed, &translated);
     if (localized != source) {
@@ -2295,6 +2674,9 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
       snprintf(generic_path, sizeof(generic_path),
                "%.*s/HoshimiLocal/generic.bin", (int)prefix_length,
                info.dli_fname);
+    if (prefix_length < 2048)
+      snprintf(phone_path, sizeof(phone_path), "%.*s/HoshimiLocal/phone.bin",
+               (int)prefix_length, info.dli_fname);
   }
 #endif
   if (memcmp((void *)(base + HOSHIMI_TARGET_RVA), patched_entry_hex,
@@ -2438,6 +2820,40 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
     record("FAIL: username_notification static gateway mismatch");
     return;
   }
+  if (memcmp((void *)(base + HOSHIMI_AUDIO_PLAY_TARGET_RVA),
+             audio_play_patched_entry_hex,
+             sizeof(audio_play_patched_entry_hex)) ||
+      memcmp((void *)(base + HOSHIMI_AUDIO_PLAY_CAVE_RVA),
+             audio_play_gateway_hex, sizeof(audio_play_gateway_hex)) ||
+      memcmp((void *)(base + HOSHIMI_AUDIO_PLAY_U64_TARGET_RVA),
+             audio_play_u64_patched_entry_hex,
+             sizeof(audio_play_u64_patched_entry_hex)) ||
+      memcmp((void *)(base + HOSHIMI_AUDIO_PLAY_U64_CAVE_RVA),
+             audio_play_u64_gateway_hex, sizeof(audio_play_u64_gateway_hex)) ||
+      memcmp((void *)(base + HOSHIMI_AUDIO_DELAYED_TARGET_RVA),
+             audio_delayed_patched_entry_hex,
+             sizeof(audio_delayed_patched_entry_hex)) ||
+      memcmp((void *)(base + HOSHIMI_AUDIO_DELAYED_CAVE_RVA),
+             audio_delayed_gateway_hex, sizeof(audio_delayed_gateway_hex)) ||
+      memcmp((void *)(base + HOSHIMI_AUDIO_ONESHOT_TARGET_RVA),
+             audio_oneshot_patched_entry_hex,
+             sizeof(audio_oneshot_patched_entry_hex)) ||
+      memcmp((void *)(base + HOSHIMI_AUDIO_ONESHOT_CAVE_RVA),
+             audio_oneshot_gateway_hex, sizeof(audio_oneshot_gateway_hex)) ||
+      memcmp((void *)(base + HOSHIMI_AUDIO_SET_CLIP_TARGET_RVA),
+             audio_set_clip_patched_entry_hex,
+             sizeof(audio_set_clip_patched_entry_hex)) ||
+      memcmp((void *)(base + HOSHIMI_AUDIO_SET_CLIP_CAVE_RVA),
+             audio_set_clip_gateway_hex,
+             sizeof(audio_set_clip_gateway_hex)) ||
+      memcmp((void *)(base + HOSHIMI_RENDER_END_TARGET_RVA),
+             render_end_patched_entry_hex,
+             sizeof(render_end_patched_entry_hex)) ||
+      memcmp((void *)(base + HOSHIMI_RENDER_END_CAVE_RVA),
+             render_end_gateway_hex, sizeof(render_end_gateway_hex))) {
+    record("FAIL: phone subtitle static gateway mismatch");
+    return;
+  }
 #endif
   original = (SetValue)(base + HOSHIMI_ORIGINAL_RVA);
   string_length = (StringLength)(base + API_IL2CPP_STRING_LENGTH);
@@ -2538,6 +2954,43 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
   record("USERNAME ARMED: ADV/message/notification; custom=%s",
          display_username[0] ? "ON" : "OFF");
 
+  if (phone_subtitles_enabled && load_phone_index()) {
+    original_audio_play =
+        (AudioPlay)(base + HOSHIMI_AUDIO_PLAY_ORIGINAL_RVA);
+    original_audio_play_u64 =
+        (AudioPlayUInt64)(base + HOSHIMI_AUDIO_PLAY_U64_ORIGINAL_RVA);
+    original_audio_delayed =
+        (AudioPlayDelayed)(base + HOSHIMI_AUDIO_DELAYED_ORIGINAL_RVA);
+    original_audio_oneshot =
+        (AudioPlayOneShot)(base + HOSHIMI_AUDIO_ONESHOT_ORIGINAL_RVA);
+    original_audio_set_clip =
+        (AudioSetClip)(base + HOSHIMI_AUDIO_SET_CLIP_ORIGINAL_RVA);
+    original_render_end =
+        (RenderEnd)(base + HOSHIMI_RENDER_END_ORIGINAL_RVA);
+    audio_get_time = (AudioGetFloat)(base + 0x77d1284ULL);
+    audio_get_clip = (AudioGetClip)(base + 0x77d13ecULL);
+    audio_clip_get_length = (AudioGetFloat)(base + 0x77cf84cULL);
+    time_get_realtime = (TimeGetFloat)(base + 0x78471e8ULL);
+    __atomic_store_n((uintptr_t *)(base + HOSHIMI_AUDIO_PLAY_SLOT_RVA),
+                     (uintptr_t)audio_play_hook, __ATOMIC_RELEASE);
+    __atomic_store_n((uintptr_t *)(base + HOSHIMI_AUDIO_PLAY_U64_SLOT_RVA),
+                     (uintptr_t)audio_play_u64_hook, __ATOMIC_RELEASE);
+    __atomic_store_n((uintptr_t *)(base + HOSHIMI_AUDIO_DELAYED_SLOT_RVA),
+                     (uintptr_t)audio_delayed_hook, __ATOMIC_RELEASE);
+    __atomic_store_n((uintptr_t *)(base + HOSHIMI_AUDIO_ONESHOT_SLOT_RVA),
+                     (uintptr_t)audio_oneshot_hook, __ATOMIC_RELEASE);
+    __atomic_store_n((uintptr_t *)(base + HOSHIMI_AUDIO_SET_CLIP_SLOT_RVA),
+                     (uintptr_t)audio_set_clip_hook, __ATOMIC_RELEASE);
+    __atomic_store_n((uintptr_t *)(base + HOSHIMI_RENDER_END_SLOT_RVA),
+                     (uintptr_t)render_end_hook, __ATOMIC_RELEASE);
+    record("PHONE ARMED: 5 AudioSource hooks + EndCameraRendering; root=%s",
+           phone_path);
+  } else if (phone_subtitles_enabled) {
+    record("PHONE DISABLED: embedded phone.bin was not found or invalid");
+  } else {
+    record("PHONE DISABLED: usePhoneSubtitles=OFF");
+  }
+
   if (images_enabled) {
     original_image_sprite =
         (ImageSetter)(base + HOSHIMI_IMAGE_SPRITE_ORIGINAL_RVA);
@@ -2607,7 +3060,7 @@ __attribute__((constructor)) static void start(void) {
   record("Font activation disabled; Korean glyphs are expected to render as "
          "squares");
 #else
-  record("Hoshimi iOS hook v33: multilingual nickname input");
+  record("Hoshimi iOS hook v35: Android-style phone subtitles");
   record("Static SourceSansPro-Regular OTF replacement expected in "
          "sharedassets0.assets");
 #endif

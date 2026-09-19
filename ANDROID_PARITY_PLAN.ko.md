@@ -21,7 +21,7 @@ iOS v29 소스에는 다음 기능이 들어 있다.
 | 쉼표·Two-Em Dash·`[center]` 보정 | 구현 | Android의 `FixLigature`와 레이아웃 처리에 대응 |
 | MasterDB 사용 스위치 | 구현 | 실제 Master 훅과 연결됨 |
 | 이미지 교체 스위치 | v30 실기 확인 | 네 이미지 훅 및 PNG 836개와 연결 |
-| 전화 자막 스위치 | 설정만 구현 | 아직 오디오/자막 훅과 연결되지 않음 |
+| 전화 자막 스위치 | v35 실기 확인 | 원본 514개 키 중 실제 자막 361클립·4,382줄 및 여섯 정적 훅과 연결 |
 
 `master.bin`과 `generic.bin`은 Android JSON을 다른 방식으로 새로 해석한 데이터가 아니다.
 Android 서브레포의 같은 JSON을 IPA 빌드 시 읽기 전용 인덱스로 바꾼 것이다. 데이터 출처와
@@ -63,7 +63,7 @@ PNG 836개를 `--include-images` 옵션으로 IPA에 포함한다. v29 성공 �
 첫 이미지 읽기·디코딩·생성 비용을 계측한 뒤 최적화할 예정이다. 아직 원인이 확정된 것은 아니다.
 
 
-### 2. 전화 자막
+### 2. 전화 자막 — v35 실기 확인
 
 Android는 `phoneSubtitles.json`을 읽어 전화 음성 클립 재생을 감지하고, 재생 시간에 맞춰
 TMP 자막을 갱신한다. 현재 데이터는 514개 클립, 4,681줄, 약 711 KB다.
@@ -78,10 +78,13 @@ TMP 자막을 갱신한다. 현재 데이터는 514개 클립, 4,681줄, 약 711
 - `Object.get_name`: `0x7843a14`
 - `Time.get_realtimeSinceStartup`: `0x78471e8`
 
-아직 없는 것은 매 프레임 자막을 갱신할 안전한 main-thread 진입점과 TMP 오버레이 생성에
-필요한 보조 API다. Android의 `EndCameraRendering`을 그대로 쓰되 iOS 주소를 추가로 찾는
-것을 우선안으로 한다. `phoneSubtitles.json`은 같은 내용을 빌드 시 이진 인덱스로 바꿔
-내장할 수 있다.
+v35는 `EndCameraRendering` (`0x7874178`)을 안전한 main-thread 갱신점으로 연결했다.
+AudioSource 다섯 진입점에서 `sud_vo_phone` 클립만 추적하고, 재생 위치에 맞는 줄을 선택한다.
+별도 Canvas를 만들지 않고 Android의 안정화 경로와 같이 전화 화면의 기존 `TalkTime` TMP에
+자막을 합친다. `phoneSubtitles.json` 514개 키·4,681개 행에서 Android처럼 빈 번역을 제외한
+실제 자막 361클립·4,382줄을 검증된 `phone.bin`으로 바꿔
+내장한다. 53개 자동 테스트와 ARM64 빌드가 통과했고, 2026-09-19 사용자가 실제 통화에서
+자막 표시와 시간 동기화가 정상 동작함을 확인했다.
 
 ### 3. 사용자명 치환 — v33 다국어 입력 보완
 
@@ -94,9 +97,9 @@ TMP 자막을 갱신한다. 현재 데이터는 514개 클립, 4,681줄, 약 711
 - Android와 같은 부모 getter를 훅하며 별도 LoveADV override는 추가하지 않는다.
 - HomeAction·HomeTalk·HomeTalkCall은 공통 UI 훅을 우회하므로 MasterDB setter 직전에서도
   `{user}`와 조사를 정규화한다. 일반 문자열과 `List<String>` 필드 둘 다 적용한다.
-- Settings Bundle 규격에 없는 `KeyboardType=Default`를 제거해 한글 키보드를 포함한
-  시스템 기본 다국어 키보드를 사용한다.
-- 48개 자동 테스트와 빌드는 통과했으며, Home 세 테이블의 실기 재확인이 남았다.
+- Settings Bundle의 `PSTextFieldSpecifier`는 다국어 기본 키보드를 선택할 수 없으므로
+  한글 닉네임은 다른 입력란에서 복사해 설정 필드에 붙여넣는다.
+- Home 세 테이블을 포함한 사용자명 치환과 조사 처리를 사용자 기기에서 확인했다.
 
 ### 4. 일부 텍스트 진입 경로의 동등성
 
