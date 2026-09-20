@@ -7,7 +7,7 @@ Android 참고 구현은 `../hoshimi-localify-android/app/src/main/cpp/HoshimiLo
 
 2026-09-15: 사용자가 SideStore + iLoader로 복호화된 IDOLY PRIDE 6.0.2의 설치와 실행에 성공했다. 기존 Android의 IL2CPP 번역 훅·JSON 데이터와 폰트 자산 교체를 이식한다. AstralParty/프로토버프 방식은 사용하지 않는다.
 
-## 현재 결과물: Hook v38 (번역 데이터 자동 업데이트 실기 확인 대기)
+## 현재 결과물: Hook v40 (그래픽 설정 실기 확인 대기)
 
 사용자 기기에서 v18의 화면·폰트·ADV 번역이 확인됐다. v23은 ADV 원문 파일에는 괄호 치환만 적용하고, Android와 같은 generic 텍스트 보정 단계에서 조사·대시·문장부호를 처리한다. 검증된 `Google.Protobuf.MessageExtensions.MergeFrom` 뒤에서 MasterDB의 직접 필드와 중첩 객체·배열을 모두 적용한다. 정적 폰트 경로는 교체한 `SourceSansPro-Regular`를 런타임에서 찾아 Android 방식으로 활성화하고, 모든 TMP 폰트의 폴백 목록에 등록한다. v29는 generic 분할 검색이 원문을 출력한 뒤 호출자가 다시 원문을 붙이던 중복 버그를 수정했다. 정적 게이트웨이 자체가 원인이라는 이전 판단은 잘못이었다. 제공된 Dobby는 디버거 스크립트가 처리하는 BRK 명령을 포함하므로 일반 IPA 실행 경로에서 제거했다. 여섯 텍스트 훅은 정적 게이트웨이로 연결하며, 부분 문자열도 Android처럼 지정 범위만 번역한다. 2026-09-16 사용자가 v29 설치 후 정상 실행과 문제없음을 확인했다. 이후 기능 추가의 성공 기준선으로 보존한다.
 
@@ -26,6 +26,11 @@ v38은 Android와 같은 GitHub Latest Release API와 `useAPIAssets` 설정을 �
 다음 실행부터 다운로드 데이터를 IPA 내장 데이터보다 우선해서 읽는다. 실패하거나 중단되면
 내장 데이터로 계속 실행한다. 설정에는 현재 번역 데이터 버전, 새 번역 데이터 버전, 업데이트
 상태를 표시한다.
+
+v40은 Android의 `targetFrameRate`와 `gameOrientation` 동작을 정적 훅으로 이식한다. iOS 설정
+앱의 `아이프라` 항목에서 최대 FPS를 숫자로 입력하고 화면 방향(원본/세로/가로)을
+선택할 수 있다. Solis 그래픽 설정과 Unity의 최종 프레임 제한을 모두 가로채며, 화면 방향은
+게임의 `InternalSetOrientationAsync` 호출 시 Android와 같은 고정 방향 값으로 바꾼다.
 
 `hoshimi-local` Release ZIP은 기존 Android용 `version.txt`와 `local-files`를 그대로 유지하고,
 같은 ZIP에 `ios-data/localization.bin`, `master.bin`, `generic.bin`, `phone.bin`을 추가한다.
@@ -88,12 +93,12 @@ Unity API를 모의 구현한 ARM64 이미지 테스트와 기존 회귀 테스�
 
 로그는 실행마다 새로 쓰므로 **앱을 다시 켜기 전에 보관**한다. 처음 24개 번역 적중과 100·1,000번째 적중을 기록한다. 번역 키와 문자열 길이만 기록하며 게임이 표시하는 원문 값은 기록하지 않는다.
 
-### Hook v23 빌드 및 검증
+### Hook v40 빌드 및 검증
 
 ```powershell
 chcp 65001 > $null
 ./build-hook.ps1
-python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --include-images --include-phone-subtitles --patch-revision 38 --output build/IdolyPride-6.0.2-HoshimiHook-v38.ipa
+python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --include-images --include-phone-subtitles --patch-revision 40 --output build/IdolyPride-6.0.2-HoshimiHook-v40.ipa
 ```
 
 출력 IPA가 이미 있으면 새 이름을 지정한다. 원본 IPA는 변경하지 않는다.

@@ -24,6 +24,8 @@ static int master_enabled = 1;
 static int images_enabled = 1;
 static int phone_subtitles_enabled = 1;
 static int api_assets_enabled;
+static int target_frame_rate;
+static int game_orientation;
 static char display_username[4096];
 static char localization_path[4096];
 static void *localization_blob;
@@ -81,6 +83,24 @@ static RenderEnd original_render_end;
 static AudioGetClip audio_get_clip;
 static AudioGetFloat audio_get_time, audio_clip_get_length;
 static TimeGetFloat time_get_realtime;
+
+typedef struct {
+  void *source;
+  int16_t token;
+  uint8_t padding[6];
+} UniTaskValue;
+typedef struct {
+  void *source;
+} CancellationTokenValue;
+typedef UniTaskValue (*OrientationSet)(void *, int32_t, CancellationTokenValue,
+                                       const void *);
+typedef void (*QualitySetFps)(void *, float, const void *);
+typedef void (*QualityApply)(void *, const void *);
+typedef void (*UnitySetFps)(int32_t, const void *);
+static OrientationSet original_orientation_set;
+static QualitySetFps original_quality_set_fps;
+static QualityApply original_quality_apply;
+static UnitySetFps original_unity_set_fps;
 static int append_managed_utf8(char *output, size_t capacity, size_t *used,
                                void *value);
 static void *method_entry(const void *method);
@@ -133,6 +153,60 @@ static int read_boolean_setting(const char *setting_key, int default_value) {
   release(key);
   dlclose(cf);
   return exists ? value != 0 : default_value;
+}
+
+static int read_integer_setting(const char *setting_key, int default_value) {
+  typedef void *(*StringCreate)(void *, const char *, uint32_t);
+  typedef void *(*Copy)(void *, void *);
+  typedef uintptr_t (*TypeID)(const void *);
+  typedef uintptr_t (*GetTypeID)(void);
+  typedef int32_t (*StringGetInteger)(void *);
+  typedef uint8_t (*NumberGetValue)(void *, int32_t, void *);
+  typedef void (*Release)(void *);
+  void *cf = dlopen(
+      "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+      RTLD_NOW);
+  if (!cf)
+    return default_value;
+  StringCreate make_string =
+      (StringCreate)dlsym(cf, "CFStringCreateWithCString");
+  Copy copy = (Copy)dlsym(cf, "CFPreferencesCopyAppValue");
+  TypeID type = (TypeID)dlsym(cf, "CFGetTypeID");
+  GetTypeID string_type = (GetTypeID)dlsym(cf, "CFStringGetTypeID");
+  GetTypeID number_type = (GetTypeID)dlsym(cf, "CFNumberGetTypeID");
+  StringGetInteger string_integer =
+      (StringGetInteger)dlsym(cf, "CFStringGetIntValue");
+  NumberGetValue number_value =
+      (NumberGetValue)dlsym(cf, "CFNumberGetValue");
+  Release release = (Release)dlsym(cf, "CFRelease");
+  void **current_application =
+      (void **)dlsym(cf, "kCFPreferencesCurrentApplication");
+  if (!make_string || !copy || !type || !string_type || !number_type ||
+      !string_integer || !number_value || !release || !current_application ||
+      !*current_application) {
+    dlclose(cf);
+    return default_value;
+  }
+  void *key = make_string(0, setting_key, 0x08000100u);
+  if (!key) {
+    dlclose(cf);
+    return default_value;
+  }
+  void *stored = copy(key, *current_application);
+  int64_t value = default_value;
+  int valid = 0;
+  if (stored && type(stored) == string_type()) {
+    value = string_integer(stored);
+    valid = 1;
+  } else if (stored && type(stored) == number_type()) {
+    valid = number_value(stored, 4 /* kCFNumberSInt64Type */, &value) != 0;
+  }
+  if (stored)
+    release(stored);
+  release(key);
+  dlclose(cf);
+  return valid && value >= INT32_MIN && value <= INT32_MAX ? (int)value
+                                                           : default_value;
 }
 
 /* Read Settings.bundle text without truncating multi-byte UTF-8 names. */
@@ -2703,6 +2777,33 @@ static void *username_notification_hook(void *self, void *name,
   free(input);
   return result;
 }
+
+static UniTaskValue orientation_set_hook(void *self, int32_t orientation,
+                                         CancellationTokenValue cancellation,
+                                         const void *method) {
+  if (game_orientation == 1)
+    orientation = 2; /* FixedPortrait */
+  else if (game_orientation == 2)
+    orientation = 3; /* FixedLandscape */
+  return original_orientation_set(self, orientation, cancellation, method);
+}
+
+static void quality_set_fps_hook(void *self, float value,
+                                 const void *method) {
+  original_quality_set_fps(
+      self, target_frame_rate ? (float)target_frame_rate : value, method);
+}
+
+static void quality_apply_hook(void *self, const void *method) {
+  if (target_frame_rate)
+    original_quality_set_fps(self, (float)target_frame_rate, 0);
+  original_quality_apply(self, method);
+}
+
+static void unity_set_fps_hook(int32_t value, const void *method) {
+  original_unity_set_fps(target_frame_rate ? target_frame_rate : value,
+                         method);
+}
 #endif
 
 #ifndef HOSHIMI_TEXT_ONLY
@@ -2938,6 +3039,29 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
     record("FAIL: phone subtitle static gateway mismatch");
     return;
   }
+  if (memcmp((void *)(base + HOSHIMI_ORIENTATION_TARGET_RVA),
+             orientation_patched_entry_hex,
+             sizeof(orientation_patched_entry_hex)) ||
+      memcmp((void *)(base + HOSHIMI_ORIENTATION_CAVE_RVA),
+             orientation_gateway_hex, sizeof(orientation_gateway_hex)) ||
+      memcmp((void *)(base + HOSHIMI_QUALITY_FPS_TARGET_RVA),
+             quality_fps_patched_entry_hex,
+             sizeof(quality_fps_patched_entry_hex)) ||
+      memcmp((void *)(base + HOSHIMI_QUALITY_FPS_CAVE_RVA),
+             quality_fps_gateway_hex, sizeof(quality_fps_gateway_hex)) ||
+      memcmp((void *)(base + HOSHIMI_QUALITY_APPLY_TARGET_RVA),
+             quality_apply_patched_entry_hex,
+             sizeof(quality_apply_patched_entry_hex)) ||
+      memcmp((void *)(base + HOSHIMI_QUALITY_APPLY_CAVE_RVA),
+             quality_apply_gateway_hex, sizeof(quality_apply_gateway_hex)) ||
+      memcmp((void *)(base + HOSHIMI_UNITY_FPS_TARGET_RVA),
+             unity_fps_patched_entry_hex,
+             sizeof(unity_fps_patched_entry_hex)) ||
+      memcmp((void *)(base + HOSHIMI_UNITY_FPS_CAVE_RVA),
+             unity_fps_gateway_hex, sizeof(unity_fps_gateway_hex))) {
+    record("FAIL: graphics static gateway mismatch");
+    return;
+  }
 #endif
   original = (SetValue)(base + HOSHIMI_ORIGINAL_RVA);
   string_length = (StringLength)(base + API_IL2CPP_STRING_LENGTH);
@@ -3075,6 +3199,25 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
     record("PHONE DISABLED: usePhoneSubtitles=OFF");
   }
 
+  original_orientation_set =
+      (OrientationSet)(base + HOSHIMI_ORIENTATION_ORIGINAL_RVA);
+  original_quality_set_fps =
+      (QualitySetFps)(base + HOSHIMI_QUALITY_FPS_ORIGINAL_RVA);
+  original_quality_apply =
+      (QualityApply)(base + HOSHIMI_QUALITY_APPLY_ORIGINAL_RVA);
+  original_unity_set_fps =
+      (UnitySetFps)(base + HOSHIMI_UNITY_FPS_ORIGINAL_RVA);
+  __atomic_store_n((uintptr_t *)(base + HOSHIMI_ORIENTATION_SLOT_RVA),
+                   (uintptr_t)orientation_set_hook, __ATOMIC_RELEASE);
+  __atomic_store_n((uintptr_t *)(base + HOSHIMI_QUALITY_FPS_SLOT_RVA),
+                   (uintptr_t)quality_set_fps_hook, __ATOMIC_RELEASE);
+  __atomic_store_n((uintptr_t *)(base + HOSHIMI_QUALITY_APPLY_SLOT_RVA),
+                   (uintptr_t)quality_apply_hook, __ATOMIC_RELEASE);
+  __atomic_store_n((uintptr_t *)(base + HOSHIMI_UNITY_FPS_SLOT_RVA),
+                   (uintptr_t)unity_set_fps_hook, __ATOMIC_RELEASE);
+  record("GRAPHICS ARMED: targetFrameRate=%d gameOrientation=%d",
+         target_frame_rate, game_orientation);
+
   if (images_enabled) {
     original_image_sprite =
         (ImageSetter)(base + HOSHIMI_IMAGE_SPRITE_ORIGINAL_RVA);
@@ -3147,7 +3290,7 @@ __attribute__((constructor)) static void start(void) {
   record("Font activation disabled; Korean glyphs are expected to render as "
          "squares");
 #else
-  record("Hoshimi iOS hook v38: GitHub translation data updater");
+  record("Hoshimi iOS hook v40: numeric graphics settings");
   record("Static SourceSansPro-Regular OTF replacement expected in "
          "sharedassets0.assets");
 #endif
@@ -3157,6 +3300,12 @@ __attribute__((constructor)) static void start(void) {
   images_enabled = read_boolean_setting("replaceImages", 1);
   phone_subtitles_enabled = read_boolean_setting("usePhoneSubtitles", 1);
   api_assets_enabled = read_boolean_setting("useAPIAssets", 0);
+  target_frame_rate = read_integer_setting("targetFrameRate", 0);
+  game_orientation = read_integer_setting("gameOrientation", 0);
+  if (target_frame_rate < 0 || target_frame_rate > 240)
+    target_frame_rate = 0;
+  if (game_orientation < 0 || game_orientation > 2)
+    game_orientation = 0;
   read_username_setting();
   record("PATCH SETTING: HoshimiLocalifyEnabled=%s",
          patch_enabled ? "ON" : "OFF");
@@ -3167,6 +3316,8 @@ __attribute__((constructor)) static void start(void) {
          master_enabled ? "ON" : "OFF", images_enabled ? "ON" : "OFF",
          phone_subtitles_enabled ? "ON" : "OFF",
          api_assets_enabled ? "ON" : "OFF");
+  record("GRAPHICS SETTINGS: targetFrameRate=%d gameOrientation=%d",
+         target_frame_rate, game_orientation);
 #ifndef HOSHIMI_TEXT_ONLY
   if (!api_assets_enabled)
     update_write_setting("translationDataUpdateStatus", "자동 업데이트 꺼짐");

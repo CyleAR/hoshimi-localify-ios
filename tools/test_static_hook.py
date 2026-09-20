@@ -18,7 +18,8 @@ from static_hook import (TARGET, EXPECTED, FONT_TARGET, FONT_EXPECTED,
                          TMP_SETCHARARRAY_TARGET, TMP_SETCHARARRAY_EXPECTED,
                          TEXTFIELD_TARGET, TEXTFIELD_EXPECTED,
                          UI_TEXT_TARGET, UI_TEXT_EXPECTED,
-                         branch, gateway, IMAGE_SITES, USERNAME_SITES, PHONE_SITES)
+                         branch, gateway, IMAGE_SITES, USERNAME_SITES, PHONE_SITES,
+                         GRAPHICS_SITES)
 
 CAVE = 0x9788050
 SLOT = 0xAB944D8
@@ -51,6 +52,7 @@ class GatewayExecutionTests(unittest.TestCase):
         stack = slide + 0x30000000
         for page in {((slide + a) & ~0xFFF) for a in (target, cave, slot)} | {hook, stack}:
             uc.mem_map(page, 4096)
+        uc.mem_map(0x110000, 4096)
         uc.mem_write(slide + target, struct.pack("<I", branch(target, cave)))
         uc.mem_write(slide + cave, gateway(cave, slot, target, expected[:4]))
         uc.mem_write(slide + slot, struct.pack("<Q", hook if armed else 0))
@@ -124,6 +126,17 @@ class GatewayExecutionTests(unittest.TestCase):
                     self.run_gateway(armed, 0x103A40000, trampoline=trampoline,
                         target=target, cave=0x9788270 + 32 * index,
                         slot=0xAB94560 + 8 * index, expected=expected,
+                        saved=layouts[index], stack_size=stack_sizes[index])
+
+    def test_graphics_gateways_preserve_original_arguments(self):
+        layouts = (None, None, None, (20, 19))
+        stack_sizes = (128, 0, 64, 32)
+        for index, (name, target, expected) in enumerate(GRAPHICS_SITES):
+            for armed, trampoline in ((False, False), (True, False), (True, True)):
+                with self.subTest(site=name, armed=armed, trampoline=trampoline):
+                    self.run_gateway(armed, 0x103A40000, trampoline=trampoline,
+                        target=target, cave=0x9788330 + 32 * index,
+                        slot=0xAB94590 + 8 * index, expected=expected,
                         saved=layouts[index], stack_size=stack_sizes[index])
 
     def test_unarmed_falls_back_to_original(self):

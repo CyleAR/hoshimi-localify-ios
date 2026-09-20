@@ -41,6 +41,14 @@ class HeaderInjectionTests(unittest.TestCase):
         self.assertEqual(toggle["Type"], "PSToggleSwitchSpecifier")
         for key in ("useMasterTrans", "replaceImages", "usePhoneSubtitles"):
             self.assertIs(toggles[key]["DefaultValue"], True)
+        fps = toggles["targetFrameRate"]
+        self.assertEqual(fps["Type"], "PSTextFieldSpecifier")
+        self.assertEqual(fps["DefaultValue"], "0")
+        self.assertEqual(fps["KeyboardType"], "NumberPad")
+        orientation = toggles["gameOrientation"]
+        self.assertEqual(orientation["Type"], "PSMultiValueSpecifier")
+        self.assertEqual(orientation["DefaultValue"], 0)
+        self.assertEqual(orientation["Values"], [0, 1, 2])
         self.assertIs(toggles["useAPIAssets"]["DefaultValue"], False)
         for key in ("currentTranslationDataVersion", "latestTranslationDataVersion",
                     "translationDataUpdateStatus"):

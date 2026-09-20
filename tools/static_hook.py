@@ -39,6 +39,12 @@ PHONE_SITES = (
     ("audio_set_clip", 0x77D143C, bytes.fromhex("f657bda9f44f01a9fd7b02a9fd830091")),
     ("render_end", 0x7874178, bytes.fromhex("f657bda9f44f01a9fd7b02a9fd830091")),
 )
+GRAPHICS_SITES = (
+    ("orientation", 0x6F988EC, bytes.fromhex("ff0302d1f85f04a9f65705a9f44f06a9")),
+    ("quality_fps", 0x6F9D434, bytes.fromhex("00a000bdc0035fd6f44fbea9fd7b01a9")),
+    ("quality_apply", 0x6F9D764, bytes.fromhex("ff0301d1f65701a9f44f02a9fd7b03a9")),
+    ("unity_fps", 0x77DD9B4, bytes.fromhex("f44fbea9fd7b01a9fd430091138a01f0")),
+)
 MODULE = 0x9DEEB28
 TOKEN_ROW = 0x26F
 HELPER_ROW = 0x27E
@@ -64,13 +70,13 @@ def branch(pc, target):
 def gateway(cave, slot, target, displaced):
     if cave % 4 or slot % 8 or len(displaced) != 4:
         raise ValueError("Invalid gateway alignment/size")
-    # Only relocate the exact STP x26,x25,[sp,#-80]! prologue. It neither
-    # addresses PC-relative data nor consumes ABI scratch registers x16/x17.
+    # Relocate only verified, position-independent prologue instructions. None
+    # addresses PC-relative data or consumes ABI scratch registers x16/x17.
     if displaced not in (EXPECTED[:4], FONT_EXPECTED[:4], ADV_EXPECTED[:4],
                           MASTER_EXPECTED[:4], TMP_SET_TEXT_EXPECTED[:4],
                           TMP_POPULATE_EXPECTED[:4], TMP_SETTEXT_BOOL_EXPECTED[:4],
                           TMP_SETCHARARRAY_EXPECTED[:4], TEXTFIELD_EXPECTED[:4],
-                          UI_TEXT_EXPECTED[:4], *(site[2][:4] for site in IMAGE_SITES + USERNAME_SITES + PHONE_SITES)):
+                          UI_TEXT_EXPECTED[:4], *(site[2][:4] for site in IMAGE_SITES + USERNAME_SITES + PHONE_SITES + GRAPHICS_SITES)):
         raise ValueError("Unsupported displaced instruction")
     page_delta = (slot >> 12) - (cave >> 12)
     if not -(1 << 20) <= page_delta < (1 << 20):
@@ -176,7 +182,7 @@ def plan(data):
         ("textfield", TEXTFIELD_TARGET, TEXTFIELD_EXPECTED),
         ("ui_text", UI_TEXT_TARGET, UI_TEXT_EXPECTED),
     ]
-    text_sites.extend(IMAGE_SITES + USERNAME_SITES + PHONE_SITES)
+    text_sites.extend(IMAGE_SITES + USERNAME_SITES + PHONE_SITES + GRAPHICS_SITES)
     for name, target, expected in text_sites:
         if data[target:target + len(expected)] != expected:
             raise ValueError(f"Unexpected {name} prologue")
@@ -274,7 +280,7 @@ def patch(data, expected_plan):
     # Offline gateways keep executable pages unchanged at runtime (no JIT).
     for name in ("tmp_set_text", "tmp_populate", "tmp_settext_bool",
                  "tmp_setchararray", "textfield", "ui_text",
-                 *(site[0] for site in IMAGE_SITES + USERNAME_SITES + PHONE_SITES)):
+                 *(site[0] for site in IMAGE_SITES + USERNAME_SITES + PHONE_SITES + GRAPHICS_SITES)):
         cave = actual[f"{name}_cave_rva"]
         code = bytes.fromhex(actual[f"{name}_gateway_hex"])
         target = actual[f"{name}_target_rva"]
