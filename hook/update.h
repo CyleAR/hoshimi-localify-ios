@@ -1,5 +1,5 @@
 /* GitHub Release translation-data updater. Included by hook.c after image_hook.h. */
-#define UPDATE_API_URL "https://api.github.com/repos/CyleAR/Idolypride-Translation-Data-KR/releases/latest"
+#define UPDATE_API_URL "https://api.github.com/repos/CyleAR/ipr-translation-data-ko/releases/latest"
 #define UPDATE_UTF8 0x08000100u
 
 static int update_started;
@@ -384,7 +384,7 @@ static int update_http_get(const char *url, const char *output_path,
                 ? message_create(0, method, cf_url, *http_version)
                 : 0;
   header_name = string_create(0, "User-Agent", UPDATE_UTF8);
-  header_value = string_create(0, "HoshimiLocalify-iOS/36", UPDATE_UTF8);
+  header_value = string_create(0, "HoshimiLocalify-iOS/38", UPDATE_UTF8);
   if (!request || !header_name || !header_value) goto done;
   set_header(request, header_name, header_value);
   stream = stream_create(0, request);
@@ -527,6 +527,9 @@ static void *update_worker(void *unused) {
     record("UPDATE FAIL: release JSON or zip asset invalid");
     return 0;
   }
+  record("UPDATE RELEASE: current=%s latest=%s asset=%s",
+         update_current_version[0] ? update_current_version : "unknown",
+         version, asset_url);
   update_write_setting("latestTranslationDataVersion", version);
   if (!strcmp(version, update_current_version)) {
     update_write_setting("translationDataUpdateStatus", "최신 버전");
