@@ -45,17 +45,21 @@ class HeaderInjectionTests(unittest.TestCase):
         self.assertEqual(fps["Type"], "PSTextFieldSpecifier")
         self.assertEqual(fps["DefaultValue"], "0")
         self.assertEqual(fps["KeyboardType"], "NumberPad")
-        orientation = toggles["gameOrientation"]
-        self.assertEqual(orientation["Type"], "PSMultiValueSpecifier")
-        self.assertEqual(orientation["DefaultValue"], 0)
-        self.assertEqual(orientation["Values"], [0, 1, 2])
-        self.assertIs(toggles["useAPIAssets"]["DefaultValue"], False)
+        self.assertNotIn("gameOrientation", toggles)
+        self.assertIs(toggles["useAPIAssets"]["DefaultValue"], True)
         for key in ("currentTranslationDataVersion", "latestTranslationDataVersion",
                     "translationDataUpdateStatus"):
             self.assertEqual(toggles[key]["Type"], "PSTitleValueSpecifier")
         diagnostics = toggles["HoshimiDiagnosticsEnabled"]
         self.assertEqual(diagnostics["Key"], "HoshimiDiagnosticsEnabled")
         self.assertIs(diagnostics["DefaultValue"], False)
+        code = toggles["advancedFeatureCode"]
+        self.assertEqual(code["Type"], "PSTextFieldSpecifier")
+        self.assertEqual(code["KeyboardType"], "NumberPad")
+        self.assertIs(code["IsSecure"], True)
+        skip = toggles["skipLiveToResult"]
+        self.assertEqual(skip["Type"], "PSToggleSwitchSpecifier")
+        self.assertIs(skip["DefaultValue"], False)
 
     def test_probe_bundle_id_is_separate_from_main_patch(self):
         self.assertEqual(PROBE_BUNDLE_ID, "game.qualiarts.idolypride.kr.probe")

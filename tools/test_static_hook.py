@@ -19,7 +19,7 @@ from static_hook import (TARGET, EXPECTED, FONT_TARGET, FONT_EXPECTED,
                          TEXTFIELD_TARGET, TEXTFIELD_EXPECTED,
                          UI_TEXT_TARGET, UI_TEXT_EXPECTED,
                          branch, gateway, IMAGE_SITES, USERNAME_SITES, PHONE_SITES,
-                         GRAPHICS_SITES)
+                         GRAPHICS_SITES, LIVE_SITES)
 
 CAVE = 0x9788050
 SLOT = 0xAB944D8
@@ -129,8 +129,8 @@ class GatewayExecutionTests(unittest.TestCase):
                         saved=layouts[index], stack_size=stack_sizes[index])
 
     def test_graphics_gateways_preserve_original_arguments(self):
-        layouts = (None, None, None, (20, 19))
-        stack_sizes = (128, 0, 64, 32)
+        layouts = (None, None, (20, 19))
+        stack_sizes = (0, 64, 32)
         for index, (name, target, expected) in enumerate(GRAPHICS_SITES):
             for armed, trampoline in ((False, False), (True, False), (True, True)):
                 with self.subTest(site=name, armed=armed, trampoline=trampoline):
@@ -138,6 +138,14 @@ class GatewayExecutionTests(unittest.TestCase):
                         target=target, cave=0x9788330 + 32 * index,
                         slot=0xAB94590 + 8 * index, expected=expected,
                         saved=layouts[index], stack_size=stack_sizes[index])
+
+    def test_live_skip_gateway_preserves_original_arguments(self):
+        name, target, expected = LIVE_SITES[0]
+        for armed, trampoline in ((False, False), (True, False), (True, True)):
+            with self.subTest(site=name, armed=armed, trampoline=trampoline):
+                self.run_gateway(armed, 0x103A40000, trampoline=trampoline,
+                    target=target, cave=0x97883B0, slot=0xAB945B0,
+                    expected=expected, saved=(22, 21), stack_size=48)
 
     def test_unarmed_falls_back_to_original(self):
         self.run_gateway(False, 0)

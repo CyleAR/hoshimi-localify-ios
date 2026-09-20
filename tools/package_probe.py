@@ -26,11 +26,6 @@ LOCALIZATION_INDEX_NAME = LOCAL_DATA_ROOT + "localization.bin"
 GENERIC_INDEX_NAME = LOCAL_DATA_ROOT + "generic.bin"
 PHONE_INDEX_NAME = LOCAL_DATA_ROOT + "phone.bin"
 MASTER_INDEX_NAME = LOCAL_DATA_ROOT + "master.bin"
-DOBBY_NAME = "libdobby.dylib"
-DOBBY_ARCHIVE_NAME = APP + "Frameworks/" + DOBBY_NAME
-DOBBY_REQUIRED_EXPORTS = (b"_DobbyHook\0", b"_DobbyDestroy\0")
-
-
 def settings_plist():
     """Native Settings.app controls; values are stored in this app's defaults domain."""
     return plistlib.dumps({
@@ -38,12 +33,11 @@ def settings_plist():
         "PreferenceSpecifiers": [
             {
                 "Type": "PSGroupSpecifier",
-                "Title": "한글패치",
                 "FooterText": "변경 후 게임을 완전히 종료한 뒤 다시 실행하세요.",
             },
             {
                 "Type": "PSToggleSwitchSpecifier",
-                "Title": "한글패치 사용",
+                "Title": "기능 활성화",
                 "Key": "HoshimiLocalifyEnabled",
                 "DefaultValue": True,
                 "TrueValue": True,
@@ -107,14 +101,6 @@ def settings_plist():
                 "AutocorrectionType": "No",
             },
             {
-                "Type": "PSMultiValueSpecifier",
-                "Title": "화면 방향 고정",
-                "Key": "gameOrientation",
-                "DefaultValue": 0,
-                "Titles": ["원본", "세로 화면", "가로 화면"],
-                "Values": [0, 1, 2],
-            },
-            {
                 "Type": "PSGroupSpecifier",
                 "Title": "번역 데이터 업데이트",
                 "FooterText": "새 데이터는 백그라운드에서 내려받고 다음 실행부터 적용됩니다. 버전 표시는 설정 화면을 다시 열면 갱신됩니다.",
@@ -153,6 +139,24 @@ def settings_plist():
                 "Type": "PSToggleSwitchSpecifier",
                 "Title": "주소 진단 모드",
                 "Key": "HoshimiDiagnosticsEnabled",
+                "DefaultValue": False,
+                "TrueValue": True,
+                "FalseValue": False,
+            },
+            {
+                "Type": "PSTextFieldSpecifier",
+                "Title": "고급 기능 코드",
+                "Key": "advancedFeatureCode",
+                "DefaultValue": "",
+                "KeyboardType": "NumberPad",
+                "IsSecure": True,
+                "AutocapitalizationType": "None",
+                "AutocorrectionType": "No",
+            },
+            {
+                "Type": "PSToggleSwitchSpecifier",
+                "Title": "라이브 결과로 바로 이동",
+                "Key": "skipLiveToResult",
                 "DefaultValue": False,
                 "TrueValue": True,
                 "FalseValue": False,
@@ -271,7 +275,7 @@ def add_load_dylib(data, name):
 
 def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=None,
             local_data_root=None, include_adv=False, include_master=False,
-            patch_revision=None, dobby_path=None, include_images=False,
+            patch_revision=None, include_images=False,
             include_phone_subtitles=False):
     if output.exists() or output.with_suffix(".report.json").exists():
         raise ValueError("Output already exists; choose a new output filename")
@@ -285,16 +289,6 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
     if digest != SOURCE_SHA256:
         raise ValueError("Input SHA-256 differs from the verified decrypted 6.0.2 IPA")
     lib = dylib.read_bytes()
-    dobby = dobby_path.read_bytes() if dobby_path else None
-    if dobby:
-        # This prebuilt uses valid 4-byte-aligned LC_RPATH commands (44/28
-        # bytes), while the game binaries use the stricter 8-byte layout.
-        commands(dobby, alignment=4)
-        if struct.unpack_from("<I", dobby, 12)[0] != 6:
-            raise ValueError("Dobby payload must be a Mach-O dylib")
-        for symbol in DOBBY_REQUIRED_EXPORTS:
-            if symbol not in dobby:
-                raise ValueError(f"Dobby payload is missing required export: {symbol[:-1].decode()}")
     if (include_adv or include_master or include_images or include_phone_subtitles) and not local_data_root:
         raise ValueError("--local-data-root is required when embedding translation data")
     local_payload = collect_local_payload(local_data_root, include_adv, include_master, include_images,
@@ -336,8 +330,6 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
                 raise ValueError("Unsafe archive path")
         if APP + "Frameworks/" + library_name in names:
             raise ValueError("Probe already exists")
-        if dobby and DOBBY_ARCHIVE_NAME in names:
-            raise ValueError("Dobby already exists")
         # Check every executable reported in the original IPA analysis.
         for name in (APP + "IDOLY PRIDE", UNITY,
                      APP + "Frameworks/AppLovinSDK.framework/AppLovinSDK",
@@ -368,6 +360,11 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
         info["CFBundleName"] = app_id_name
         if patch_revision is not None:
             info["CFBundleVersion"] = "141." + str(patch_revision)
+        # The original IPA explicitly disables the full ProMotion refresh range.
+        # Unity's Application.targetFrameRate can lower the rate without these,
+        # but iPad Pro and iPhone Pro need the respective opt-in to reach 120 Hz.
+        info["CADisableMinimumFrameDuration"] = True
+        info["CADisableMinimumFrameDurationOnPhone"] = True
         info["UIFileSharingEnabled"] = True
         info["LSSupportsOpeningDocumentsInPlace"] = True
         info_bytes = plistlib.dumps(info, fmt=plistlib.FMT_BINARY)
@@ -376,14 +373,11 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
                   "dylib_sha256": hashlib.sha256(lib).hexdigest(), "bundle_id": bundle_id,
                   "display_name": display_name, "app_id_name": app_id_name,
                   "bundle_version": info["CFBundleVersion"],
+                  "high_refresh_rate_enabled": True,
                   "settings_toggle": "HoshimiLocalifyEnabled",
                   "diagnostics_toggle": "HoshimiDiagnosticsEnabled",
                   "load_path": load_path, "signing": "must be re-signed by iLoader or SideStore",
                   "log": "Documents/hoshimi-ios-hook.log" if hook_plan else "Documents/hoshimi-ios-probe.log", **details}
-        if dobby:
-            report["dobby"] = {"archive": DOBBY_ARCHIVE_NAME,
-                               "sha256": hashlib.sha256(dobby).hexdigest(),
-                               "mode": "runtime text hooks"}
         if local_payload:
             report["local_data"] = {
                 "version": (local_data_root.resolve() / "version.txt").read_text(
@@ -438,11 +432,6 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
             entry.create_system = 3
             entry.external_attr = 0o100755 << 16
             dst.writestr(entry, lib, compress_type=zipfile.ZIP_DEFLATED)
-            if dobby:
-                dobby_entry = zipfile.ZipInfo(DOBBY_ARCHIVE_NAME)
-                dobby_entry.create_system = 3
-                dobby_entry.external_attr = 0o100755 << 16
-                dst.writestr(dobby_entry, dobby, compress_type=zipfile.ZIP_DEFLATED)
             dst.writestr(SETTINGS_ROOT, settings_bytes, compress_type=zipfile.ZIP_DEFLATED)
             for archive_name, path in local_payload:
                 dst.write(path, archive_name, compress_type=zipfile.ZIP_DEFLATED,
@@ -465,8 +454,6 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
             raise ValueError("Output ZIP verification failed")
         if check.read(APP + "Frameworks/" + library_name) != lib:
             raise ValueError("Embedded dylib mismatch")
-        if dobby and check.read(DOBBY_ARCHIVE_NAME) != dobby:
-            raise ValueError("Embedded Dobby mismatch")
         if check.read(SETTINGS_ROOT) != settings_bytes:
             raise ValueError("Embedded Settings.bundle mismatch")
         for archive_name, path in local_payload:
@@ -506,9 +493,7 @@ if __name__ == "__main__":
                         help="Compile and embed local-files/phoneSubtitles.json")
     parser.add_argument("--patch-revision", type=int,
                         help="Use 141.<revision> as CFBundleVersion so iOS treats it as an update")
-    parser.add_argument("--dobby", type=Path,
-                        help="arm64 libdobby.dylib used for runtime text hooks")
     args = parser.parse_args()
     package(args.ipa, args.dylib, args.output, args.bundle_id, args.hook_plan, args.font_file,
             args.local_data_root, args.include_adv, args.include_master, args.patch_revision,
-            args.dobby, args.include_images, args.include_phone_subtitles)
+            args.include_images, args.include_phone_subtitles)

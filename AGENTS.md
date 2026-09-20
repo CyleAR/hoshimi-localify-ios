@@ -9,5 +9,5 @@
 - Input IPA: `dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa`. Never commit game IPAs, dumps, or build outputs.
 - See README.ko.md for the complete packaging command.
 - Keep the installed identity: display name 아이프라, bundle ID game.qualiarts.idolypride.kr. Update the existing app; do not uninstall it.
-- v29 text translation and v30 image replacement were verified on device. Keep static hooks; the supplied Dobby requires debugger support and is not used by normal IPA builds.
+- v29 text translation and v30 image replacement were verified on device. Keep the static hooks.
 - Minor home-loading stutter remains a measured-performance follow-up; its cause is not yet confirmed.

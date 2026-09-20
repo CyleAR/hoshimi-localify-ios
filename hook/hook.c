@@ -25,7 +25,7 @@ static int images_enabled = 1;
 static int phone_subtitles_enabled = 1;
 static int api_assets_enabled;
 static int target_frame_rate;
-static int game_orientation;
+static int skip_live_to_result;
 static char display_username[4096];
 static char localization_path[4096];
 static void *localization_blob;
@@ -84,23 +84,16 @@ static AudioGetClip audio_get_clip;
 static AudioGetFloat audio_get_time, audio_clip_get_length;
 static TimeGetFloat time_get_realtime;
 
-typedef struct {
-  void *source;
-  int16_t token;
-  uint8_t padding[6];
-} UniTaskValue;
-typedef struct {
-  void *source;
-} CancellationTokenValue;
-typedef UniTaskValue (*OrientationSet)(void *, int32_t, CancellationTokenValue,
-                                       const void *);
 typedef void (*QualitySetFps)(void *, float, const void *);
 typedef void (*QualityApply)(void *, const void *);
 typedef void (*UnitySetFps)(int32_t, const void *);
-static OrientationSet original_orientation_set;
 static QualitySetFps original_quality_set_fps;
 static QualityApply original_quality_apply;
 static UnitySetFps original_unity_set_fps;
+typedef void (*LiveScene)(void *, uint8_t, const void *);
+typedef void (*LiveResult)(void *, const void *);
+static LiveScene original_live_scene;
+static LiveResult live_result;
 static int append_managed_utf8(char *output, size_t capacity, size_t *used,
                                void *value);
 static void *method_entry(const void *method);
@@ -2778,16 +2771,6 @@ static void *username_notification_hook(void *self, void *name,
   return result;
 }
 
-static UniTaskValue orientation_set_hook(void *self, int32_t orientation,
-                                         CancellationTokenValue cancellation,
-                                         const void *method) {
-  if (game_orientation == 1)
-    orientation = 2; /* FixedPortrait */
-  else if (game_orientation == 2)
-    orientation = 3; /* FixedLandscape */
-  return original_orientation_set(self, orientation, cancellation, method);
-}
-
 static void quality_set_fps_hook(void *self, float value,
                                  const void *method) {
   original_quality_set_fps(
@@ -2803,6 +2786,17 @@ static void quality_apply_hook(void *self, const void *method) {
 static void unity_set_fps_hook(int32_t value, const void *method) {
   original_unity_set_fps(target_frame_rate ? target_frame_rate : value,
                          method);
+}
+
+static void live_scene_hook(void *data, uint8_t is_full_skip,
+                            const void *method) {
+  if (skip_live_to_result && data && live_result) {
+    record("LIVE SKIP: loading result directly; isFullSkip=%d",
+           is_full_skip ? 1 : 0);
+    live_result(data, 0);
+    return;
+  }
+  original_live_scene(data, is_full_skip, method);
 }
 #endif
 
@@ -3039,12 +3033,7 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
     record("FAIL: phone subtitle static gateway mismatch");
     return;
   }
-  if (memcmp((void *)(base + HOSHIMI_ORIENTATION_TARGET_RVA),
-             orientation_patched_entry_hex,
-             sizeof(orientation_patched_entry_hex)) ||
-      memcmp((void *)(base + HOSHIMI_ORIENTATION_CAVE_RVA),
-             orientation_gateway_hex, sizeof(orientation_gateway_hex)) ||
-      memcmp((void *)(base + HOSHIMI_QUALITY_FPS_TARGET_RVA),
+  if (memcmp((void *)(base + HOSHIMI_QUALITY_FPS_TARGET_RVA),
              quality_fps_patched_entry_hex,
              sizeof(quality_fps_patched_entry_hex)) ||
       memcmp((void *)(base + HOSHIMI_QUALITY_FPS_CAVE_RVA),
@@ -3060,6 +3049,14 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
       memcmp((void *)(base + HOSHIMI_UNITY_FPS_CAVE_RVA),
              unity_fps_gateway_hex, sizeof(unity_fps_gateway_hex))) {
     record("FAIL: graphics static gateway mismatch");
+    return;
+  }
+  if (memcmp((void *)(base + HOSHIMI_LIVE_SCENE_TARGET_RVA),
+             live_scene_patched_entry_hex,
+             sizeof(live_scene_patched_entry_hex)) ||
+      memcmp((void *)(base + HOSHIMI_LIVE_SCENE_CAVE_RVA),
+             live_scene_gateway_hex, sizeof(live_scene_gateway_hex))) {
+    record("FAIL: live skip static gateway mismatch");
     return;
   }
 #endif
@@ -3199,24 +3196,25 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
     record("PHONE DISABLED: usePhoneSubtitles=OFF");
   }
 
-  original_orientation_set =
-      (OrientationSet)(base + HOSHIMI_ORIENTATION_ORIGINAL_RVA);
   original_quality_set_fps =
       (QualitySetFps)(base + HOSHIMI_QUALITY_FPS_ORIGINAL_RVA);
   original_quality_apply =
       (QualityApply)(base + HOSHIMI_QUALITY_APPLY_ORIGINAL_RVA);
   original_unity_set_fps =
       (UnitySetFps)(base + HOSHIMI_UNITY_FPS_ORIGINAL_RVA);
-  __atomic_store_n((uintptr_t *)(base + HOSHIMI_ORIENTATION_SLOT_RVA),
-                   (uintptr_t)orientation_set_hook, __ATOMIC_RELEASE);
   __atomic_store_n((uintptr_t *)(base + HOSHIMI_QUALITY_FPS_SLOT_RVA),
                    (uintptr_t)quality_set_fps_hook, __ATOMIC_RELEASE);
   __atomic_store_n((uintptr_t *)(base + HOSHIMI_QUALITY_APPLY_SLOT_RVA),
                    (uintptr_t)quality_apply_hook, __ATOMIC_RELEASE);
   __atomic_store_n((uintptr_t *)(base + HOSHIMI_UNITY_FPS_SLOT_RVA),
                    (uintptr_t)unity_set_fps_hook, __ATOMIC_RELEASE);
-  record("GRAPHICS ARMED: targetFrameRate=%d gameOrientation=%d",
-         target_frame_rate, game_orientation);
+  record("GRAPHICS ARMED: targetFrameRate=%d", target_frame_rate);
+  original_live_scene =
+      (LiveScene)(base + HOSHIMI_LIVE_SCENE_ORIGINAL_RVA);
+  live_result = (LiveResult)(base + 0x1a17f20ULL);
+  __atomic_store_n((uintptr_t *)(base + HOSHIMI_LIVE_SCENE_SLOT_RVA),
+                   (uintptr_t)live_scene_hook, __ATOMIC_RELEASE);
+  record("LIVE SKIP ARMED: enabled=%s", skip_live_to_result ? "ON" : "OFF");
 
   if (images_enabled) {
     original_image_sprite =
@@ -3290,7 +3288,7 @@ __attribute__((constructor)) static void start(void) {
   record("Font activation disabled; Korean glyphs are expected to render as "
          "squares");
 #else
-  record("Hoshimi iOS hook v40: numeric graphics settings");
+  record("Hoshimi iOS hook v44: ProMotion frame-rate override");
   record("Static SourceSansPro-Regular OTF replacement expected in "
          "sharedassets0.assets");
 #endif
@@ -3301,11 +3299,13 @@ __attribute__((constructor)) static void start(void) {
   phone_subtitles_enabled = read_boolean_setting("usePhoneSubtitles", 1);
   api_assets_enabled = read_boolean_setting("useAPIAssets", 0);
   target_frame_rate = read_integer_setting("targetFrameRate", 0);
-  game_orientation = read_integer_setting("gameOrientation", 0);
   if (target_frame_rate < 0 || target_frame_rate > 240)
     target_frame_rate = 0;
-  if (game_orientation < 0 || game_orientation > 2)
-    game_orientation = 0;
+  int advanced_feature_code =
+      read_integer_setting("advancedFeatureCode", 0);
+  skip_live_to_result =
+      advanced_feature_code == 619 &&
+      read_boolean_setting("skipLiveToResult", 0);
   read_username_setting();
   record("PATCH SETTING: HoshimiLocalifyEnabled=%s",
          patch_enabled ? "ON" : "OFF");
@@ -3316,8 +3316,10 @@ __attribute__((constructor)) static void start(void) {
          master_enabled ? "ON" : "OFF", images_enabled ? "ON" : "OFF",
          phone_subtitles_enabled ? "ON" : "OFF",
          api_assets_enabled ? "ON" : "OFF");
-  record("GRAPHICS SETTINGS: targetFrameRate=%d gameOrientation=%d",
-         target_frame_rate, game_orientation);
+  record("GRAPHICS SETTINGS: targetFrameRate=%d", target_frame_rate);
+  record("ADVANCED SETTINGS: code=%s skipLiveToResult=%s",
+         advanced_feature_code == 619 ? "ACCEPTED" : "LOCKED",
+         skip_live_to_result ? "ON" : "OFF");
 #ifndef HOSHIMI_TEXT_ONLY
   if (!api_assets_enabled)
     update_write_setting("translationDataUpdateStatus", "자동 업데이트 꺼짐");
