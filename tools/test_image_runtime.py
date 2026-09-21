@@ -30,7 +30,6 @@ static size_t fread(void *b,size_t s,size_t n,FILE *f) {
 }
 #define SEEK_END 2
 #define SEEK_SET 0
-static void *font_get_name(void *v,const void *m) {(void)v;(void)m;return "icon(Clone)";}
 static int append_managed_utf8(char *d,size_t n,size_t *used,void *s) {
  *used=strlen(s);if(*used>=n)return 0;memcpy(d,s,*used+1);return 1;
 }
@@ -46,7 +45,7 @@ static void mock_free(uint32_t h) {roots[h]=0;}
 static void *mock_get(uint32_t h) {return roots[h];}
 static void *mock_unbox(void *v) {return v;}
 static void *mock_invoke(const void *m,void *self,void **args,void **exception) {
- static uint8_t yes=1;static struct ImageRect rect={10,20,100,200};
+ static uint8_t yes=1,no=0;static struct ImageRect rect={10,20,100,200};
  static struct ImageVec2 pivot={25,150};static struct ImageVec4 border={1,2,3,4};static float ppu=100;
  switch((uintptr_t)m) {
  case 1: ctor_count++;if(self!=&texture_object || *(int*)args[0]!=2 || *(int*)args[2]!=4 || *(uint8_t*)args[3])errors++;break;
@@ -61,11 +60,16 @@ static void *mock_invoke(const void *m,void *self,void **args,void **exception) 
  case 7: return &pivot;
  case 8: return &border;
  case 9: return &ppu;
- case 10:return &yes;
+ case 10:if(args[0]==&original_object && scenario==8)return &no;
+         if(args[0]==&original_object && scenario==9){*exception=(void*)1;return 0;}
+         return &yes;
  case 11:return &original_object;
  case 12:return &original_object;
  case 13:aspect_count++;if(*(uint8_t*)args[0]!=1)errors++;break;
  case 14:break;
+ case 15:if(scenario==6){*exception=(void*)1;return 0;}
+         if(scenario==8 || scenario==9)errors++;
+         return "icon(Clone)";
  default: errors++;
  }return 0;
 }
@@ -75,11 +79,29 @@ static void mock_set(void *self,void *value,const void *method) {
 static void mock_enable(void *self,const void *method) {(void)self;(void)method;}
 __attribute__((section(".entry"))) int *run(int mode) {
  static int result[6];scenario=mode;heap=0x800000;image_api_state=1;image_root[0]='x';
+ if(mode==7) {
+  static struct ImageCache first, second;
+  char candidate[6]={'x','a','a','a','a',0};
+  uint32_t hash=image_name_hash("icon");int found=0;
+  for(unsigned i=0;i<26u*26u*26u*26u;i++) {
+   unsigned v=i;for(int j=1;j<5;j++){candidate[j]='a'+v%26;v/=26;}
+   if((image_name_hash(candidate)&(IMAGE_CACHE_BUCKETS-1))==(hash&(IMAGE_CACHE_BUCKETS-1))) {found=1;break;}
+  }
+  if(!found)errors++;
+  memcpy(first.name,"icon",5);first.hash=hash;first.next=&second;
+  memcpy(second.name,candidate,6);second.hash=image_name_hash(candidate);second.next=0;
+  image_cache[hash&(IMAGE_CACHE_BUCKETS-1)]=&first;
+  if(image_cache_find("icon",hash)!=&first ||
+     image_cache_find(candidate,second.hash)!=&second ||
+     image_cache_find("missing",image_name_hash("missing")))errors++;
+  result[0]=result[1]=result[2]=result[3]=result[4]=0;result[5]=errors;return result;
+ }
  image_invoke=mock_invoke;image_unbox=mock_unbox;image_object_new=mock_new;image_array_new=mock_array;
  image_root_new=mock_root;image_root_free=mock_free;image_root_get=mock_get;
  image_ctor=(void*)1;image_load=(void*)2;image_create=(void*)3;image_hide=(void*)4;image_wrap=(void*)5;
  image_rect=(void*)6;image_pivot=(void*)7;image_border=(void*)8;image_ppu=(void*)9;image_alive=(void*)10;
  image_get_sprite=(void*)11;image_get_texture=(void*)12;image_aspect=(void*)13;image_destroy=(void*)14;
+ image_get_name=(void*)15;
  original_image_sprite=mock_set;original_image_override=mock_set;original_image_texture=mock_set;original_image_enable=mock_enable;
  if(mode==2)images_enabled=0;
  if(mode==5)image_enable_hook(&owner_object,0);
@@ -136,3 +158,15 @@ class ImageRuntimeTests(unittest.TestCase):
 
     def test_onenable_replaces_serialized_sprite(self):
         self.assertEqual(self.run_case(5), (1, 1, 1, 1, 1, 0))
+
+    def test_name_exception_retains_original(self):
+        self.assertEqual(self.run_case(6), (0, 0, 0, 0, 0, 0))
+
+    def test_destroyed_original_skips_name_lookup(self):
+        self.assertEqual(self.run_case(8), (0, 0, 0, 0, 0, 0))
+
+    def test_liveness_exception_skips_name_lookup(self):
+        self.assertEqual(self.run_case(9), (0, 0, 0, 0, 0, 0))
+
+    def test_hash_bucket_collision_uses_full_name(self):
+        self.assertEqual(self.run_case(7), (0, 0, 0, 0, 0, 0))

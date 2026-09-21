@@ -2422,10 +2422,29 @@ static int append_managed_utf8(char *output, size_t capacity, size_t *used,
 static int master_prefix(const char *value, const char *prefix, size_t length) {
   if (!value || !prefix)
     return 0;
-  for (size_t i = 0; i < length; ++i)
-    if (value[i] != prefix[i])
-      return 0;
-  return 1;
+  return strncmp(value, prefix, length) == 0;
+}
+
+/* Master entries are sorted by their full UTF-8 key in master_data.py.
+ * Find the first key for this item's primary-key prefix without scanning the
+ * entire table on every protobuf merge. */
+static uint32_t master_first_entry(const struct MasterHeader *header,
+                                   const struct MasterEntry *entries,
+                                   const struct MasterTable *table,
+                                   const char *prefix) {
+  uint32_t low = table->entry_start;
+  uint32_t high = low + table->entry_count;
+  uint32_t end = high;
+  while (low < high) {
+    uint32_t mid = low + (high - low) / 2;
+    const char *key = master_string(header, entries[mid].key);
+    if (!key) return end;
+    if (strcmp(key, prefix) < 0)
+      low = mid + 1;
+    else
+      high = mid;
+  }
+  return low;
 }
 
 static int master_capitalize(const char *field, size_t length, char *method,
@@ -2674,12 +2693,13 @@ static void localize_master(void *message) {
   }
   unsigned applied = 0;
   uint32_t entry_end = table->entry_start + table->entry_count;
-  for (uint32_t i = table->entry_start; i < entry_end; ++i) {
+  for (uint32_t i = master_first_entry(h, entries, table, prefix);
+       i < entry_end; ++i) {
     const char *key = master_string(h, entries[i].key);
+    if (!key || !master_prefix(key, prefix, prefix_length)) break;
+    if (!key[prefix_length]) continue;
     const char *translation = master_string(h, entries[i].value);
-    if (!key || !translation || strlen(key) <= prefix_length ||
-        !master_prefix(key, prefix, prefix_length))
-      continue;
+    if (!translation) continue;
     const char *path = key + prefix_length;
     char normalized[512];
     size_t used = 0;
@@ -3288,7 +3308,7 @@ __attribute__((constructor)) static void start(void) {
   record("Font activation disabled; Korean glyphs are expected to render as "
          "squares");
 #else
-  record("Hoshimi iOS hook v45: safe translation data cleanup");
+  record("Hoshimi iOS patch v1.0.0: guarded image names and hashed image cache");
   record("Static SourceSansPro-Regular OTF replacement expected in "
          "sharedassets0.assets");
 #endif

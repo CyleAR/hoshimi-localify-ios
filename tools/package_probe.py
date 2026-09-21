@@ -19,6 +19,7 @@ LOAD_PATH = "@loader_path/../" + LIBRARY_NAME
 DEFAULT_BUNDLE_ID = "game.qualiarts.idolypride.kr"
 DISPLAY_NAME = "아이프라"
 APP_ID_NAME = "IdolyPrideKR"
+PATCH_VERSION = "1.0.0"
 PROBE_BUNDLE_ID = DEFAULT_BUNDLE_ID + ".probe"
 SETTINGS_ROOT = APP + "Settings.bundle/Root.plist"
 LOCAL_DATA_ROOT = APP + "HoshimiLocal/"
@@ -372,6 +373,7 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
         report = {"stage": "static-i18n-setvalue-hook" if hook_plan else "loader-and-il2cpp-resolver-only", "source_sha256": digest,
                   "dylib_sha256": hashlib.sha256(lib).hexdigest(), "bundle_id": bundle_id,
                   "display_name": display_name, "app_id_name": app_id_name,
+                  "patch_version": PATCH_VERSION if hook_plan else None,
                   "bundle_version": info["CFBundleVersion"],
                   "high_refresh_rate_enabled": True,
                   "settings_toggle": "HoshimiLocalifyEnabled",

@@ -7,7 +7,7 @@ Android 참고 구현은 `../hoshimi-localify-android/app/src/main/cpp/HoshimiLo
 
 2026-09-15: 사용자가 SideStore + iLoader로 복호화된 IDOLY PRIDE 6.0.2의 설치와 실행에 성공했다. 기존 Android의 IL2CPP 번역 훅·JSON 데이터와 폰트 자산 교체를 이식한다. AstralParty/프로토버프 방식은 사용하지 않는다.
 
-## 현재 결과물: Hook v45 (실기 확인 완료)
+## 현재 결과물: 패치 v1.0.0 (실기 검증 대기)
 
 사용자 기기에서 v18의 화면·폰트·ADV 번역이 확인됐다. v23은 ADV 원문 파일에는 괄호 치환만 적용하고, Android와 같은 generic 텍스트 보정 단계에서 조사·대시·문장부호를 처리한다. 검증된 `Google.Protobuf.MessageExtensions.MergeFrom` 뒤에서 MasterDB의 직접 필드와 중첩 객체·배열을 모두 적용한다. 정적 폰트 경로는 교체한 `SourceSansPro-Regular`를 런타임에서 찾아 Android 방식으로 활성화하고, 모든 TMP 폰트의 폴백 목록에 등록한다. v29는 generic 분할 검색이 원문을 출력한 뒤 호출자가 다시 원문을 붙이던 중복 버그를 수정했다. 정적 게이트웨이 자체가 원인이라는 이전 판단은 잘못이었다. 여섯 텍스트 훅은 정적 게이트웨이로 연결하며, 부분 문자열도 Android처럼 지정 범위만 번역한다. 2026-09-16 사용자가 v29 설치 후 정상 실행과 문제없음을 확인했다. 이후 기능 추가의 성공 기준선으로 보존한다.
 
@@ -50,6 +50,25 @@ v45는 원격 번역 데이터가 검증을 마치고 다음 실행에서 활성
 업데이터가 만든 것으로 확인할 수 없는 이름의 항목도 그대로 둔다. 버전명 `.`과 `..`는 경로
 검증에서 거부한다.
 2026-09-21 사용자가 실기에서 정상 동작을 확인했다.
+
+v46은 MasterDB 병합 시 테이블 전체 번역 키를 순회하던 경로를 정렬된 인덱스의
+이진 검색으로 바꾼다. 객체의 기본 키에 해당하는 첫 항목을 찾은 뒤 같은 키의 필드만
+적용한다. 데이터 형식과 필드 적용 순서는 유지한다. ARM64 런타임 테스트로 복합 키,
+없는 키, 테이블 경계와 검색 횟수를 검증했다.
+2026-09-21 사용자가 v46 설치 후 홈 화면 진입 시 체감 렉이 사라졌다고 보고했다.
+v46 IPA에는 번역 데이터 `20260920_223835`도 포함되므로, MasterDB 검색 개선의
+기여도를 분리한 시간 측정은 아직 하지 않았다.
+
+패치 v1.0.0은 v46에서 보고된 강종의 iPadOS `.ips` 스택을 분석해 이미지 교체 중
+`UnityEngine.Object.get_name` 직접 호출에서 관리형 예외가 발생한 것을 확인하고,
+Android처럼 원본 객체의 생존 여부를 먼저 확인한다. 생존 확인 또는 이름 조회에서
+예외가 발생해도 `il2cpp_runtime_invoke`로 포착한다. 이름을 가져오지 못하면
+그 이미지는 교체하지 않고 원본을 유지한다. 이미지 이름 캐시는 전체 연결 리스트 대신
+1024개 해시 버킷으로 찾고, 충돌 시 전체 이름을 비교한다. 이 수정의 실기 결과는 아직 확인되지 않았다.
+
+앞으로 패치 릴리스는 `v1.0.0` 형식으로 표기한다. 원본 게임 버전 `6.0.2`는
+유지하고, iPadOS가 기존 `아이프라` 앱의 업데이트로 인식하도록 내부 빌드 번호는
+이전 `141.47`보다 높은 `141.48`을 사용한다.
 
 `hoshimi-local` Release ZIP은 기존 Android용 `version.txt`와 `local-files`를 그대로 유지하고,
 같은 ZIP에 `ios-data/localization.bin`, `master.bin`, `generic.bin`, `phone.bin`을 추가한다.
@@ -112,12 +131,12 @@ Unity API를 모의 구현한 ARM64 이미지 테스트와 기존 회귀 테스�
 
 로그는 실행마다 새로 쓰므로 **앱을 다시 켜기 전에 보관**한다. 처음 24개 번역 적중과 100·1,000번째 적중을 기록한다. 번역 키와 문자열 길이만 기록하며 게임이 표시하는 원문 값은 기록하지 않는다.
 
-### Hook v45 빌드 및 검증
+### 패치 v1.0.0 빌드 및 검증
 
 ```powershell
 chcp 65001 > $null
 ./build-hook.ps1
-python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --include-images --include-phone-subtitles --patch-revision 45 --output build/IdolyPride-6.0.2-HoshimiHook-v45.ipa
+python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --include-images --include-phone-subtitles --patch-revision 48 --output build/IdolyPride-6.0.2-HoshimiHook-v1.0.0.ipa
 ```
 
 출력 IPA가 이미 있으면 새 이름을 지정한다. 원본 IPA는 변경하지 않는다.

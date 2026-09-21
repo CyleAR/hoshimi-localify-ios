@@ -19,18 +19,35 @@ static void *(*image_root_get)(uint32_t);
 static void *image_byte_class, *image_texture_class;
 static const void *image_ctor, *image_load, *image_create, *image_hide, *image_wrap;
 static const void *image_rect, *image_pivot, *image_border, *image_ppu, *image_alive;
-static const void *image_get_sprite, *image_get_texture, *image_aspect, *image_destroy;
+static const void *image_get_name, *image_get_sprite, *image_get_texture;
+static const void *image_aspect, *image_destroy;
 
 struct ImageRect { float x, y, width, height; };
 struct ImageVec2 { float x, y; };
 struct ImageVec4 { float x, y, z, w; };
 struct ImageCache {
     char name[512];
+    uint32_t hash;
     uint32_t texture, sprite;
     int missing;
     struct ImageCache *next;
 };
-static struct ImageCache *image_cache;
+#define IMAGE_CACHE_BUCKETS 1024u
+static struct ImageCache *image_cache[IMAGE_CACHE_BUCKETS];
+
+static uint32_t image_name_hash(const char *name) {
+    uint32_t hash = 2166136261u;
+    for (const unsigned char *p = (const unsigned char *)name; *p; ++p)
+        hash = (hash ^ *p) * 16777619u;
+    return hash;
+}
+
+static struct ImageCache *image_cache_find(const char *name, uint32_t hash) {
+    for (struct ImageCache *entry = image_cache[hash & (IMAGE_CACHE_BUCKETS - 1)];
+         entry; entry = entry->next)
+        if (entry->hash == hash && !strcmp(entry->name, name)) return entry;
+    return 0;
+}
 
 static void *image_call(const void *method, void *self, void **args) {
     if (!method || image_exception) return 0;
@@ -132,6 +149,7 @@ static int image_resolve(void) {
     image_load = image_method(klass(conversion, "UnityEngine", "ImageConversion"), "LoadImage", 3, load);
     image_create = image_method(sprite, "Create", 7, create);
     image_hide = image_method(object, "set_hideFlags", 1, hide);
+    image_get_name = image_method(object, "get_name", 0, 0);
     image_wrap = image_method(texture, "set_wrapMode", 1, wrap);
     image_alive = image_method(object, "op_Implicit", 1, obj);
     image_destroy = image_method(object, "Destroy", 1, obj);
@@ -143,7 +161,7 @@ static int image_resolve(void) {
     image_get_texture = image_method(raw, "get_texture", 0, 0);
     image_aspect = image_method(image, "set_preserveAspect", 1, boolean);
     if (!image_byte_class || !image_texture_class || !image_ctor || !image_load || !image_create ||
-        !image_hide || !image_wrap || !image_alive || !image_destroy || !image_rect || !image_pivot ||
+        !image_hide || !image_get_name || !image_wrap || !image_alive || !image_destroy || !image_rect || !image_pivot ||
         !image_border || !image_ppu || !image_get_sprite || !image_get_texture || !image_aspect) goto fail;
     image_api_state = 1;
     record("IMAGE API READY: Texture2D/LoadImage/Sprite.Create; Android image replacement");
@@ -154,7 +172,14 @@ fail:
 }
 
 static int image_name(void *object, char name[512]) {
-    void *managed = object && font_get_name ? font_get_name(object, 0) : 0;
+    /* Android checks the native Unity object before reading its name.
+     * Keep runtime_invoke as a second guard if the getter still throws. */
+    if (!object) return 0;
+    void *alive_args[] = {object};
+    void *boxed = image_call(image_alive, 0, alive_args);
+    uint8_t *alive = boxed ? image_unbox(boxed) : 0;
+    if (!alive || !*alive || image_exception) return 0;
+    void *managed = image_call(image_get_name, object, 0);
     size_t used = 0;
     if (!managed || !append_managed_utf8(name, 512, &used, managed)) return 0;
     if (used >= 7 && !memcmp(name + used - 7, "(Clone)", 7)) name[used -= 7] = 0;
@@ -219,18 +244,20 @@ static void *image_cached(uint32_t *handle) {
 
 static void *image_replacement(void *original_asset, int want_sprite) {
     char name[512];
-    if (!image_root[0] || !image_name(original_asset, name)) return 0;
-    struct ImageCache *cache = image_cache;
-    while (cache && strcmp(cache->name, name)) cache = cache->next;
+    if (!image_root[0] || !image_resolve() ||
+        !image_name(original_asset, name)) return 0;
+    uint32_t hash = image_name_hash(name);
+    struct ImageCache *cache = image_cache_find(name, hash);
     if (cache && cache->missing) return 0;
     if (!cache) {
         cache = malloc(sizeof(*cache));
         if (!cache) return 0;
         memcpy(cache->name, name, strlen(name) + 1);
+        cache->hash = hash;
         cache->texture = cache->sprite = 0; cache->missing = 0;
-        cache->next = image_cache; image_cache = cache;
+        unsigned bucket = hash & (IMAGE_CACHE_BUCKETS - 1);
+        cache->next = image_cache[bucket]; image_cache[bucket] = cache;
     }
-    if (!image_resolve()) return 0;
     void *cached = image_cached(want_sprite ? &cache->sprite : &cache->texture);
     if (cached || image_exception) return cached;
     size_t size = 0; unsigned w = 0, h = 0;
