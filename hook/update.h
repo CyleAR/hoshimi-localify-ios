@@ -63,6 +63,7 @@ static void update_write_setting(const char *name, const char *text) {
 static int update_safe_version(const char *value) {
   size_t length = value ? strlen(value) : 0;
   if (!length || length >= 96) return 0;
+  if (!strcmp(value, ".") || !strcmp(value, "..")) return 0;
   for (size_t i = 0; i < length; ++i) {
     char c = value[i];
     if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
@@ -70,6 +71,121 @@ static int update_safe_version(const char *value) {
       return 0;
   }
   return 1;
+}
+
+/* Resolve directory traversal APIs at runtime so the SDK-free build does not
+ * depend on Darwin's readdir symbol variant.  The layout matches arm64 Darwin;
+ * only d_name is inspected. */
+typedef struct UpdateDir UpdateDir;
+typedef struct UpdateDirEntry {
+  uint64_t d_ino;
+  uint64_t d_seekoff;
+  uint16_t d_reclen;
+  uint16_t d_namlen;
+  uint8_t d_type;
+  char d_name[1024];
+} UpdateDirEntry;
+typedef UpdateDir *(*UpdateOpenDir)(const char *);
+typedef UpdateDirEntry *(*UpdateReadDir)(UpdateDir *);
+typedef int (*UpdateCloseDir)(UpdateDir *);
+
+typedef struct UpdateDirApi {
+  void *handle;
+  UpdateOpenDir open;
+  UpdateReadDir read;
+  UpdateCloseDir close;
+} UpdateDirApi;
+
+static int update_open_dir_api(UpdateDirApi *api) {
+  memset(api, 0, sizeof(*api));
+  api->handle = dlopen("/usr/lib/libSystem.B.dylib", RTLD_NOW);
+  if (!api->handle) return 0;
+  api->open = (UpdateOpenDir)dlsym(api->handle, "opendir");
+  api->read = (UpdateReadDir)dlsym(api->handle, "readdir");
+  if (!api->read)
+    api->read = (UpdateReadDir)dlsym(api->handle, "readdir$INODE64");
+  api->close = (UpdateCloseDir)dlsym(api->handle, "closedir");
+  if (api->open && api->read && api->close) return 1;
+  dlclose(api->handle);
+  memset(api, 0, sizeof(*api));
+  return 0;
+}
+
+static int update_remove_tree(UpdateDirApi *api, const char *path,
+                              unsigned int depth) {
+  if (!api || !path || !*path || depth > 32) return 0;
+  /* Files, symlinks and empty directories are removed here.  In particular,
+   * removing a symlink before opendir() prevents traversal outside versions/. */
+  if (remove(path) == 0) return 1;
+  UpdateDir *directory = api->open(path);
+  if (!directory) return 0;
+  int ok = 1;
+  UpdateDirEntry *entry;
+  while ((entry = api->read(directory))) {
+    const char *name = entry->d_name;
+    if (!strcmp(name, ".") || !strcmp(name, "..")) continue;
+    char child[4096];
+    int length = snprintf(child, sizeof(child), "%s/%s", path, name);
+    if (length <= 0 || (size_t)length >= sizeof(child)) {
+      ok = 0;
+      continue;
+    }
+    if (!update_remove_tree(api, child, depth + 1))
+      ok = 0;
+  }
+  api->close(directory);
+  if (remove(path) != 0) ok = 0;
+  return ok;
+}
+
+static void update_cleanup_versions(const char *home, const char *selected) {
+  if (!home || !update_safe_version(selected)) return;
+  char versions_root[4096];
+  int root_length = snprintf(
+      versions_root, sizeof(versions_root),
+      "%s/Library/Application Support/HoshimiLocalAPI/versions", home);
+  if (root_length <= 0 || (size_t)root_length >= sizeof(versions_root)) return;
+
+  UpdateDirApi api;
+  if (!update_open_dir_api(&api)) {
+    record("UPDATE CLEANUP SKIP: directory API unavailable");
+    return;
+  }
+  UpdateDir *directory = api.open(versions_root);
+  if (!directory) {
+    dlclose(api.handle);
+    return;
+  }
+  unsigned int removed = 0, failed = 0, skipped = 0;
+  UpdateDirEntry *entry;
+  while ((entry = api.read(directory))) {
+    const char *name = entry->d_name;
+    if (!strcmp(name, ".") || !strcmp(name, "..") ||
+        !strcmp(name, selected))
+      continue;
+    /* Leave unexpected entries alone.  The updater only owns directories
+     * whose names pass the same release-version validation used on download. */
+    if (!update_safe_version(name)) {
+      ++skipped;
+      continue;
+    }
+    char old_root[4096];
+    int length = snprintf(old_root, sizeof(old_root), "%s/%s", versions_root,
+                          name);
+    if (length <= 0 || (size_t)length >= sizeof(old_root)) {
+      ++failed;
+      continue;
+    }
+    if (update_remove_tree(&api, old_root, 0))
+      ++removed;
+    else
+      ++failed;
+  }
+  api.close(directory);
+  dlclose(api.handle);
+  if (removed || failed || skipped)
+    record("UPDATE CLEANUP: active=%s removed=%u failed=%u skipped=%u",
+           selected, removed, failed, skipped);
 }
 
 static int update_mkdirs(const char *path) {
@@ -171,6 +287,14 @@ static void update_select_data_root(const char *embedded_root) {
       update_set_paths(update_data_root, 1);
       memcpy(update_current_version, selected, strlen(selected) + 1);
       record("UPDATE ACTIVE: version=%s root=%s", selected, update_data_root);
+      char stale_download[4096];
+      if (update_copy_path(stale_download, sizeof(stale_download),
+                           update_data_root, "remote.zip.tmp"))
+        remove(stale_download);
+      /* Cleanup happens only after the downloaded version survives a restart
+       * and becomes the validated active root.  This avoids deleting files a
+       * previous process may still have been reading lazily. */
+      update_cleanup_versions(home, selected);
     } else {
       update_data_root[0] = 0;
       record("UPDATE FALLBACK: active data invalid; using embedded data");
