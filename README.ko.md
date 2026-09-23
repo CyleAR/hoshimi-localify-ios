@@ -136,7 +136,7 @@ Unity API를 모의 구현한 ARM64 이미지 테스트와 기존 회귀 테스�
 ```powershell
 chcp 65001 > $null
 ./build-hook.ps1
-python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --include-images --include-phone-subtitles --patch-revision 48 --output build/IdolyPride-6.0.2-HoshimiHook-v1.0.0.ipa
+python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --include-images --include-phone-subtitles --patch-revision 48 --output build/IdolyPride-6.0.2-HoshimiLocalify-v1.0.0.ipa
 ```
 
 출력 IPA가 이미 있으면 새 이름을 지정한다. 원본 IPA는 변경하지 않는다.
@@ -156,7 +156,7 @@ iOS용 번역 원본도 Android와 같은 서브레포
 
 ```powershell
 chcp 65001 > $null
-python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --output build/IdolyPride-6.0.2-HoshimiHook-with-data.ipa
+python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --output build/IdolyPride-6.0.2-HoshimiLocalify-with-data.ipa
 ```
 
 현재 서브레포 기준 내장 대상은 ADV 3,005개, MasterDB 90개와 generic 인덱스다. 패키저가
