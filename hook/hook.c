@@ -3089,10 +3089,10 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
   original_font_awake = (FontAwake)(base + HOSHIMI_FONT_ORIGINAL_RVA);
   original_adv_load = (AdvLoad)(base + HOSHIMI_ADV_ORIGINAL_RVA);
   original_master_merge = (MasterMerge)(base + HOSHIMI_MASTER_ORIGINAL_RVA);
-  font_get_name = (FontGetName)(base + 0x7843a14ULL);
-  font_set_multi_atlas = (FontSetBool)(base + 0x771cd08ULL);
-  font_get_fallback_table = (FontGetFallbackTable)(base + 0x771cd98ULL);
-  font_clear_data = (FontSetBool)(base + 0x7724914ULL);
+  font_get_name = (FontGetName)(base + HOSHIMI_RUNTIME_OBJECT_GET_NAME_RVA);
+  font_set_multi_atlas = (FontSetBool)(base + HOSHIMI_RUNTIME_SET_MULTI_ATLAS_RVA);
+  font_get_fallback_table = (FontGetFallbackTable)(base + HOSHIMI_RUNTIME_FALLBACK_TABLE_RVA);
+  font_clear_data = (FontSetBool)(base + HOSHIMI_RUNTIME_CLEAR_FONT_DATA_RVA);
   font_object_class =
       (FontObjectClass)dlsym(unity_handle, "il2cpp_object_get_class");
   font_method_from_name = (FontMethodFromName)dlsym(
@@ -3192,10 +3192,10 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
         (AudioSetClip)(base + HOSHIMI_AUDIO_SET_CLIP_ORIGINAL_RVA);
     original_render_end =
         (RenderEnd)(base + HOSHIMI_RENDER_END_ORIGINAL_RVA);
-    audio_get_time = (AudioGetFloat)(base + 0x77d1284ULL);
-    audio_get_clip = (AudioGetClip)(base + 0x77d13ecULL);
-    audio_clip_get_length = (AudioGetFloat)(base + 0x77cf84cULL);
-    time_get_realtime = (TimeGetFloat)(base + 0x78471e8ULL);
+    audio_get_time = (AudioGetFloat)(base + HOSHIMI_RUNTIME_AUDIO_GET_TIME_RVA);
+    audio_get_clip = (AudioGetClip)(base + HOSHIMI_RUNTIME_AUDIO_GET_CLIP_RVA);
+    audio_clip_get_length = (AudioGetFloat)(base + HOSHIMI_RUNTIME_AUDIO_CLIP_GET_LENGTH_RVA);
+    time_get_realtime = (TimeGetFloat)(base + HOSHIMI_RUNTIME_TIME_GET_REALTIME_RVA);
     __atomic_store_n((uintptr_t *)(base + HOSHIMI_AUDIO_PLAY_SLOT_RVA),
                      (uintptr_t)audio_play_hook, __ATOMIC_RELEASE);
     __atomic_store_n((uintptr_t *)(base + HOSHIMI_AUDIO_PLAY_U64_SLOT_RVA),
@@ -3231,7 +3231,7 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
   record("GRAPHICS ARMED: targetFrameRate=%d", target_frame_rate);
   original_live_scene =
       (LiveScene)(base + HOSHIMI_LIVE_SCENE_ORIGINAL_RVA);
-  live_result = (LiveResult)(base + 0x1a17f20ULL);
+  live_result = (LiveResult)(base + HOSHIMI_LIVE_RESULT_TARGET_RVA);
   __atomic_store_n((uintptr_t *)(base + HOSHIMI_LIVE_SCENE_SLOT_RVA),
                    (uintptr_t)live_scene_hook, __ATOMIC_RELEASE);
   record("LIVE SKIP ARMED: enabled=%s", skip_live_to_result ? "ON" : "OFF");
@@ -3308,7 +3308,8 @@ __attribute__((constructor)) static void start(void) {
   record("Font activation disabled; Korean glyphs are expected to render as "
          "squares");
 #else
-  record("Hoshimi iOS patch v1.0.0: guarded image names and hashed image cache");
+  record("Hoshimi iOS patch v%s: guarded image names and hashed image cache",
+         HOSHIMI_PATCH_VERSION);
   record("Static SourceSansPro-Regular OTF replacement expected in "
          "sharedassets0.assets");
 #endif

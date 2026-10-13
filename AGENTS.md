@@ -6,7 +6,7 @@
 - Do not modify the sibling Android repository without an explicit request.
 - Shared translations are the `hoshimi-local` Git submodule. Keep its source data unchanged unless requested.
 - Build: `./build-hook.ps1`. Run Python tests in `tools/`, with `build/test-runtime` on PYTHONPATH.
-- Input IPA: `dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa`. Never commit game IPAs, dumps, or build outputs.
+- Input IPA: `dump/ios/game.qualiarts.idolypride-<version>-Decrypted.ipa`. Re-discover addresses with `tools/discover_hook_profile.py` and `profiles/<version>.json`; follow `VERSION_PORTING.ko.md` for every game update. Never commit game IPAs, dumps, or build outputs.
 - See README.ko.md for the complete packaging command.
 - Keep the installed identity: display name 아이프라, bundle ID game.qualiarts.idolypride.kr. Update the existing app; do not uninstall it.
 - v29 text translation and v30 image replacement were verified on device. Keep the static hooks.

@@ -1,3 +1,4 @@
+param([string]$GameVersion = '6.0.3')
 chcp 65001 > $null
 $ErrorActionPreference = 'Stop'
 $env:PYTHONIOENCODING = 'utf-8'
@@ -6,8 +7,10 @@ $taskRepo = $taskRoot
 $taskLlvm = Join-Path $env:LOCALAPPDATA 'Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/bin'
 if ($env:HOSHIMI_LLVM_BIN) { $taskLlvm = $env:HOSHIMI_LLVM_BIN }
 $taskOut = Join-Path $taskRoot 'build/hook-v2'
+$taskIpa = Join-Path $taskRepo "dump/ios/game.qualiarts.idolypride-$GameVersion-Decrypted.ipa"
+$taskProfile = Join-Path $taskRepo "profiles/$GameVersion.json"
 python (Join-Path $taskRoot 'tools/prepare_hook.py') `
-    --ipa (Join-Path $taskRepo 'dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa') `
+    --ipa $taskIpa --profile $taskProfile `
     --translations (Join-Path $taskRepo 'hoshimi-local/local-files/localization.json') --out $taskOut
 if ($LASTEXITCODE -ne 0) { throw 'Hook input validation failed' }
 & (Join-Path $taskLlvm 'clang.exe') -target arm64-apple-ios13.0 -DHOSHIMI_SDK_FREE `

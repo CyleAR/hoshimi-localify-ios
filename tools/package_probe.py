@@ -1,4 +1,4 @@
-"""Embed the diagnostic dylib in the verified 6.0.2 IPA for external signing.
+"""Embed the diagnostic dylib in a verified decrypted IPA for external signing.
 
 No input files are changed. No Apple account, network, or signing tool is used.
 """
@@ -286,9 +286,11 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
         raise ValueError("Invalid bundle ID: Apple allows only letters, numbers, periods, and hyphens")
     if patch_revision is not None and (not str(patch_revision).isdigit() or int(patch_revision) <= 0):
         raise ValueError("Patch revision must be a positive integer")
+    hook_plan = json.loads(hook_plan_path.read_text(encoding="utf-8")) if hook_plan_path else None
+    profile = hook_plan.get("profile") if hook_plan else None
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
-    if digest != SOURCE_SHA256:
-        raise ValueError("Input SHA-256 differs from the verified decrypted 6.0.2 IPA")
+    if digest != (profile["ipa_sha256"] if profile else SOURCE_SHA256):
+        raise ValueError("Input SHA-256 differs from the verified decrypted IPA")
     lib = dylib.read_bytes()
     if (include_adv or include_master or include_images or include_phone_subtitles) and not local_data_root:
         raise ValueError("--local-data-root is required when embedding translation data")
@@ -315,7 +317,6 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
     if include_phone_subtitles:
         from phone_data import compile_phone
         phone_blob, phone_details = compile_phone(local_data_root.resolve())
-    hook_plan = json.loads(hook_plan_path.read_text(encoding="utf-8")) if hook_plan_path else None
     library_name = "HoshimiLocalify.dylib" if hook_plan else LIBRARY_NAME
     load_path = "@loader_path/../" + library_name
     commands(lib)
@@ -348,8 +349,10 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
                 src.read(FONT_ASSET), _font_bytes(font_path))
         unity, details = add_load_dylib(unity, load_path)
         info = plistlib.loads(src.read(APP + "Info.plist"))
+        game_version = profile["game_version"] if profile else "6.0.2"
+        game_build = profile["game_build"] if profile else "141"
         if (info.get("CFBundleIdentifier"), info.get("CFBundleShortVersionString"),
-            info.get("CFBundleVersion")) != ("game.qualiarts.idolypride", "6.0.2", "141"):
+            info.get("CFBundleVersion")) != ("game.qualiarts.idolypride", game_version, game_build):
             raise ValueError("Unexpected game identity")
         is_standalone_probe = not hook_plan and bundle_id == PROBE_BUNDLE_ID
         display_name = "아이프라 진단" if is_standalone_probe else DISPLAY_NAME
@@ -360,7 +363,7 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
         # Keep that metadata ASCII while the user-facing display name stays Korean.
         info["CFBundleName"] = app_id_name
         if patch_revision is not None:
-            info["CFBundleVersion"] = "141." + str(patch_revision)
+            info["CFBundleVersion"] = game_build + "." + str(patch_revision)
         # The original IPA explicitly disables the full ProMotion refresh range.
         # Unity's Application.targetFrameRate can lower the rate without these,
         # but iPad Pro and iPhone Pro need the respective opt-in to reach 120 Hz.
@@ -373,7 +376,7 @@ def package(source, dylib, output, bundle_id, hook_plan_path=None, font_path=Non
         report = {"stage": "static-i18n-setvalue-hook" if hook_plan else "loader-and-il2cpp-resolver-only", "source_sha256": digest,
                   "dylib_sha256": hashlib.sha256(lib).hexdigest(), "bundle_id": bundle_id,
                   "display_name": display_name, "app_id_name": app_id_name,
-                  "patch_version": PATCH_VERSION if hook_plan else None,
+                  "patch_version": (profile["patch_version"] if profile else PATCH_VERSION) if hook_plan else None,
                   "bundle_version": info["CFBundleVersion"],
                   "high_refresh_rate_enabled": True,
                   "settings_toggle": "HoshimiLocalifyEnabled",
@@ -494,7 +497,7 @@ if __name__ == "__main__":
     parser.add_argument("--include-phone-subtitles", action="store_true",
                         help="Compile and embed local-files/phoneSubtitles.json")
     parser.add_argument("--patch-revision", type=int,
-                        help="Use 141.<revision> as CFBundleVersion so iOS treats it as an update")
+                        help="Append a patch revision to the game's CFBundleVersion for updates")
     args = parser.parse_args()
     package(args.ipa, args.dylib, args.output, args.bundle_id, args.hook_plan, args.font_file,
             args.local_data_root, args.include_adv, args.include_master, args.patch_revision,

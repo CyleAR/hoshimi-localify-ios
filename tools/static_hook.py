@@ -63,6 +63,51 @@ TMP_SETCHARARRAY_EXPECTED = bytes.fromhex("f44fbea9fd7b01a9fd430091f30300aa")
 TEXTFIELD_EXPECTED = bytes.fromhex("f85fbca9f65701a9f44f02a9fd7b03a9")
 UI_TEXT_EXPECTED = bytes.fromhex("f657bda9f44f01a9fd7b02a9fd830091")
 
+_LEGACY = {name: globals()[name] for name in (
+    "UNITY_SHA256", "TARGET", "HELPER", "FONT_TARGET", "ADV_TARGET", "MASTER_TARGET",
+    "TMP_SET_TEXT_TARGET", "TMP_POPULATE_TARGET", "TMP_SETTEXT_BOOL_TARGET",
+    "TMP_SETCHARARRAY_TARGET", "TEXTFIELD_TARGET", "UI_TEXT_TARGET",
+    "LIVE_RESULT_TARGET", "MODULE", "EXPECTED", "FONT_EXPECTED", "ADV_EXPECTED",
+    "MASTER_EXPECTED", "TMP_SET_TEXT_EXPECTED", "TMP_POPULATE_EXPECTED",
+    "TMP_SETTEXT_BOOL_EXPECTED", "TMP_SETCHARARRAY_EXPECTED", "TEXTFIELD_EXPECTED",
+    "UI_TEXT_EXPECTED", "LIVE_RESULT_EXPECTED", "IMAGE_SITES", "USERNAME_SITES",
+    "PHONE_SITES", "GRAPHICS_SITES", "LIVE_SITES")}
+
+
+def activate_profile(profile=None):
+    """Use the saved, fingerprinted address profile for one build operation."""
+    if profile is None:
+        globals().update(_LEGACY)
+        return
+    sites = profile["sites"]
+    mapping = {
+        "TARGET": "i18n", "HELPER": "helper", "FONT_TARGET": "font_awake",
+        "ADV_TARGET": "adv", "MASTER_TARGET": "master",
+        "TMP_SET_TEXT_TARGET": "tmp_set_text", "TMP_POPULATE_TARGET": "tmp_populate",
+        "TMP_SETTEXT_BOOL_TARGET": "tmp_settext_bool",
+        "TMP_SETCHARARRAY_TARGET": "tmp_setchararray", "TEXTFIELD_TARGET": "textfield",
+        "UI_TEXT_TARGET": "ui_text", "LIVE_RESULT_TARGET": "live_result",
+    }
+    for key, name in mapping.items():
+        globals()[key] = sites[name]["rva"]
+    for key, name in (("EXPECTED", "i18n"), ("FONT_EXPECTED", "font_awake"),
+                      ("ADV_EXPECTED", "adv"), ("MASTER_EXPECTED", "master"),
+                      ("TMP_SET_TEXT_EXPECTED", "tmp_set_text"),
+                      ("TMP_POPULATE_EXPECTED", "tmp_populate"),
+                      ("TMP_SETTEXT_BOOL_EXPECTED", "tmp_settext_bool"),
+                      ("TMP_SETCHARARRAY_EXPECTED", "tmp_setchararray"),
+                      ("TEXTFIELD_EXPECTED", "textfield"),
+                      ("UI_TEXT_EXPECTED", "ui_text"),
+                      ("LIVE_RESULT_EXPECTED", "live_result")):
+        globals()[key] = bytes.fromhex(sites[name]["prologue"])
+    for category in ("IMAGE_SITES", "USERNAME_SITES", "PHONE_SITES",
+                     "GRAPHICS_SITES", "LIVE_SITES"):
+        globals()[category] = tuple(
+            (name, sites[name]["rva"], bytes.fromhex(sites[name]["prologue"]))
+            for name, _, _ in _LEGACY[category])
+    globals()["UNITY_SHA256"] = profile["unity_sha256"]
+    globals()["MODULE"] = profile["codegen_module"]["rva"]
+
 
 def branch(pc, target):
     delta = target - pc
@@ -112,7 +157,8 @@ def segments(data):
     return result
 
 
-def plan(data):
+def plan(data, profile=None):
+    activate_profile(profile)
     if hashlib.sha256(data).hexdigest() != UNITY_SHA256:
         raise ValueError("UnityFramework fingerprint mismatch")
     segs = segments(data)
@@ -129,14 +175,11 @@ def plan(data):
                 return s["offset"] + relative
         raise ValueError("Address is not file-backed")
 
-    # Correlate the runtime-reported wrapper with the IL2CPP registration table,
-    # then use token 0x0600026f for the actual Android-hooked I18n.SetValue.
+    # The exact IPA fingerprint and IL2CPP registration rows are both required.
     name, count, table = struct.unpack_from("<3Q", data, va_to_offset(MODULE, 24))
     name_off = va_to_offset(name)
-    if data[name_off:name_off + 23] != b"quaunity-ui.Runtime.dll":
-        raise ValueError("Codegen module name mismatch")
-    if count < HELPER_ROW:
-        raise ValueError("Codegen method count mismatch")
+    if data[name_off:name_off + 23] != b"quaunity-ui.Runtime.dll" or count < HELPER_ROW:
+        raise ValueError("Codegen module mismatch")
     for row, expected in ((TOKEN_ROW, TARGET), (HELPER_ROW, HELPER)):
         actual = struct.unpack_from("<Q", data, va_to_offset(table + 8 * (row - 1)))[0]
         if actual != expected:
@@ -152,32 +195,60 @@ def plan(data):
         raise ValueError("Unexpected OctoResourceLoader ADV prologue")
     if data[MASTER_TARGET:MASTER_TARGET + len(MASTER_EXPECTED)] != MASTER_EXPECTED:
         raise ValueError("Unexpected MessageExtensions.MergeFrom prologue")
-    # Metadata v31: ADVEnginePresenterBase<TView>.get_UserName token 0x0600d347,
+    if profile is not None:
+        from discover_hook_profile import codegen_modules, global_method_table
+        modules = codegen_modules(data)
+        global_tables = {count: global_method_table(data, int(count))
+                         for count in profile["global_method_tables"]}
+        if global_tables != profile["global_method_tables"]:
+            raise ValueError("Saved global method table mismatch")
+        for site_name, site in profile["sites"].items():
+            target = site["rva"]
+            if data[target:target + 16].hex() != site["prologue"]:
+                raise ValueError(f"Saved hook prologue mismatch: {site_name}")
+            if "module" in site:
+                module = modules[site["module"]]
+                row = site["row"]
+                if not 1 <= row <= module["count"] or struct.unpack_from(
+                        "<Q", data, module["table"] + 8 * (row - 1))[0] != target:
+                    raise ValueError(f"Codegen method pointer mismatch: {site_name}")
+            if "global_index" in site:
+                table = global_tables[str(site["global_count"])]
+                index = site["global_index"]
+                if not 0 <= index < table["count"] or struct.unpack_from(
+                        "<Q", data, table["table_rva"] + 8 * index)[0] != target:
+                    raise ValueError(f"Global method pointer mismatch: {site_name}")
+        for method_name, method in profile["runtime_methods"].items():
+            module = modules[method["module"]]
+            if struct.unpack_from("<Q", data, module["table"] + 8 * (method["row"] - 1))[0] != method["rva"]:
+                raise ValueError(f"Runtime method pointer mismatch: {method_name}")
+    else:
+        # Metadata v31: ADVEnginePresenterBase<TView>.get_UserName token 0x0600d347,
     # methodDef 54086, shared object instantiation methodSpec 21875.
     # Generic method mapping -> function index 20631 -> verified code pointer.
-    if struct.unpack_from("<3i", data, 0x8846890 + 21875 * 12) != (54086, 10, -1):
-        raise ValueError("ADV username method spec mismatch")
-    if struct.unpack_from("<4i", data, 0x8c4e074 + 20638 * 16) != (21875, 20631, 17656, -1):
-        raise ValueError("ADV username generic mapping mismatch")
-    if struct.unpack_from("<Q", data, 0x9a32a70 + 20631 * 8)[0] != 0x4847624:
-        raise ValueError("ADV username shared method pointer mismatch")
-    for row, expected in ((0x1b3cf, 0x275fdc0), (0x1b3d0, 0x2760008)):
-        if struct.unpack_from("<Q", data, 169990024 + 8 * (row - 1))[0] != expected:
-            raise ValueError("Message username codegen pointer mismatch")
-    audio_name, audio_count, audio_table = struct.unpack_from("<3Q", data, 0x9E19500)
-    if (audio_name, audio_count, audio_table) != (0x93C5593, 0xDD, 0xA788D08):
-        raise ValueError("UnityEngine.AudioModule codegen module mismatch")
-    audio_rows = ((0x16, 0x77CF84C), (0x50, 0x77D1284), (0x54, 0x77D13EC),
-                  (0x55, 0x77D143C), (0x58, 0x77D1554), (0x59, 0x77D15AC),
-                  (0x5A, 0x77D1610), (0x5D, 0x77D16F0))
-    for row, expected in audio_rows:
-        if struct.unpack_from("<Q", data, audio_table + 8 * (row - 1))[0] != expected:
-            raise ValueError("Audio codegen pointer mismatch")
-    core_name, core_count, core_table = struct.unpack_from("<3Q", data, 0x9E19610)
-    if (core_name, core_count, core_table) != (0x938BAA1, 0x1575, 0xA789708):
-        raise ValueError("UnityEngine.CoreModule codegen module mismatch")
-    if struct.unpack_from("<Q", data, core_table + 8 * (0x12E8 - 1))[0] != 0x7874178:
-        raise ValueError("EndCameraRendering codegen pointer mismatch")
+        if struct.unpack_from("<3i", data, 0x8846890 + 21875 * 12) != (54086, 10, -1):
+            raise ValueError("ADV username method spec mismatch")
+        if struct.unpack_from("<4i", data, 0x8c4e074 + 20638 * 16) != (21875, 20631, 17656, -1):
+            raise ValueError("ADV username generic mapping mismatch")
+        if struct.unpack_from("<Q", data, 0x9a32a70 + 20631 * 8)[0] != 0x4847624:
+            raise ValueError("ADV username shared method pointer mismatch")
+        for row, expected in ((0x1b3cf, 0x275fdc0), (0x1b3d0, 0x2760008)):
+            if struct.unpack_from("<Q", data, 169990024 + 8 * (row - 1))[0] != expected:
+                raise ValueError("Message username codegen pointer mismatch")
+        audio_name, audio_count, audio_table = struct.unpack_from("<3Q", data, 0x9E19500)
+        if (audio_name, audio_count, audio_table) != (0x93C5593, 0xDD, 0xA788D08):
+            raise ValueError("UnityEngine.AudioModule codegen module mismatch")
+        audio_rows = ((0x16, 0x77CF84C), (0x50, 0x77D1284), (0x54, 0x77D13EC),
+                      (0x55, 0x77D143C), (0x58, 0x77D1554), (0x59, 0x77D15AC),
+                      (0x5A, 0x77D1610), (0x5D, 0x77D16F0))
+        for row, expected in audio_rows:
+            if struct.unpack_from("<Q", data, audio_table + 8 * (row - 1))[0] != expected:
+                raise ValueError("Audio codegen pointer mismatch")
+        core_name, core_count, core_table = struct.unpack_from("<3Q", data, 0x9E19610)
+        if (core_name, core_count, core_table) != (0x938BAA1, 0x1575, 0xA789708):
+            raise ValueError("UnityEngine.CoreModule codegen module mismatch")
+        if struct.unpack_from("<Q", data, core_table + 8 * (0x12E8 - 1))[0] != 0x7874178:
+            raise ValueError("EndCameraRendering codegen pointer mismatch")
     text_sites = [
         ("tmp_set_text", TMP_SET_TEXT_TARGET, TMP_SET_TEXT_EXPECTED),
         ("tmp_populate", TMP_POPULATE_TARGET, TMP_POPULATE_EXPECTED),
@@ -263,7 +334,7 @@ def plan(data):
 
 
 def patch(data, expected_plan):
-    actual = plan(data)
+    actual = plan(data, expected_plan.get("profile"))
     if any(expected_plan.get(key) != value for key, value in actual.items()):
         raise ValueError("Build and package hook plans differ")
     output = bytearray(data)

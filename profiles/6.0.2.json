@@ -1,0 +1,241 @@
+{
+  "game_version": "6.0.2",
+  "game_build": "141",
+  "ipa_sha256": "3f7a5ee6b3a1670754a1293d5affb6b7b3e5d78ae9ad4a54154d1444a457bb0d",
+  "unity_sha256": "1029ea4fbdfef985f9f208913deac78c7633974dc8b9fe3abde8643974bfb809",
+  "patch_version": "1.0.0",
+  "sites": {
+    "i18n": {
+      "rva": 116376088,
+      "prologue": "fa67bba9f85f01a9f65702a9f44f03a9",
+      "module": "quaunity-ui.Runtime.dll",
+      "row": 623
+    },
+    "font_awake": {
+      "rva": 124900224,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "module": "Unity.TextMeshPro.dll",
+      "row": 514
+    },
+    "adv": {
+      "rva": 115861284,
+      "prologue": "f85fbca9f65701a9f44f02a9fd7b03a9",
+      "module": "Octo.dll",
+      "row": 869
+    },
+    "master": {
+      "rva": 108523364,
+      "prologue": "03008052040080d201000014ff8303d1",
+      "module": "Google.Protobuf.dll",
+      "row": 659
+    },
+    "tmp_set_text": {
+      "rva": 125009104,
+      "prologue": "f44fbea9fd7b01a9fd43009108804339",
+      "module": "Unity.TextMeshPro.dll",
+      "row": 1190
+    },
+    "tmp_populate": {
+      "rva": 125026416,
+      "prologue": "f85fbca9f65701a9f44f02a9fd7b03a9",
+      "module": "Unity.TextMeshPro.dll",
+      "row": 1383
+    },
+    "tmp_settext_bool": {
+      "rva": 125032336,
+      "prologue": "f44fbea9fd7b01a9fd430091f30301aa",
+      "module": "Unity.TextMeshPro.dll",
+      "row": 1388
+    },
+    "tmp_setchararray": {
+      "rva": 125034608,
+      "prologue": "f44fbea9fd7b01a9fd430091f30300aa",
+      "module": "Unity.TextMeshPro.dll",
+      "row": 1402
+    },
+    "textfield": {
+      "rva": 128205452,
+      "prologue": "f85fbca9f65701a9f44f02a9fd7b03a9",
+      "module": "UnityEngine.UIElementsModule.dll",
+      "row": 1380
+    },
+    "ui_text": {
+      "rva": 129224328,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "module": "UnityEngine.UI.dll",
+      "row": 1194
+    },
+    "helper": {
+      "rva": 116381292,
+      "prologue": "f44fbea9fd7b01a9fd430091f30301aa",
+      "module": "quaunity-ui.Runtime.dll",
+      "row": 638
+    },
+    "live_result": {
+      "rva": 27361056,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "global_count": 125701,
+      "global_index": 4887
+    },
+    "image_sprite": {
+      "rva": 127355036,
+      "prologue": "e923bb6df85f01a9f65702a9f44f03a9",
+      "module": "UnityEngine.UI.dll",
+      "row": 318
+    },
+    "image_override": {
+      "rva": 127419324,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "module": "UnityEngine.UI.dll",
+      "row": 321
+    },
+    "image_texture": {
+      "rva": 129157544,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "module": "UnityEngine.UI.dll",
+      "row": 887
+    },
+    "image_enable": {
+      "rva": 127397536,
+      "prologue": "f85fbca9f65701a9f44f02a9fd7b03a9",
+      "module": "UnityEngine.UI.dll",
+      "row": 255
+    },
+    "username_adv": {
+      "rva": 75789860,
+      "prologue": "f44fbea9fd7b01a9fd430091330603b0",
+      "global_count": 251206,
+      "global_index": 20631
+    },
+    "username_message": {
+      "rva": 41287688,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "global_count": 125701,
+      "global_index": 111567
+    },
+    "username_notification": {
+      "rva": 41287104,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "global_count": 125701,
+      "global_index": 111566
+    },
+    "audio_play": {
+      "rva": 125637972,
+      "prologue": "f44fbea9fd7b01a9fd430091738a01f0",
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 88
+    },
+    "audio_play_u64": {
+      "rva": 125638060,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 89
+    },
+    "audio_delayed": {
+      "rva": 125638160,
+      "prologue": "e923bd6df44f01a9fd7b02a9fd830091",
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 90
+    },
+    "audio_oneshot": {
+      "rva": 125638384,
+      "prologue": "e923bc6df65701a9f44f02a9fd7b03a9",
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 93
+    },
+    "audio_set_clip": {
+      "rva": 125637692,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 85
+    },
+    "render_end": {
+      "rva": 126304632,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "module": "UnityEngine.CoreModule.dll",
+      "row": 4840
+    },
+    "quality_fps": {
+      "rva": 117036084,
+      "prologue": "00a000bdc0035fd6f44fbea9fd7b01a9",
+      "module": "solis-submodule.Runtime.dll",
+      "row": 2232
+    },
+    "quality_apply": {
+      "rva": 117036900,
+      "prologue": "ff0301d1f65701a9f44f02a9fd7b03a9",
+      "module": "solis-submodule.Runtime.dll",
+      "row": 2239
+    },
+    "unity_fps": {
+      "rva": 125688244,
+      "prologue": "f44fbea9fd7b01a9fd430091138a01f0",
+      "module": "UnityEngine.CoreModule.dll",
+      "row": 359
+    },
+    "live_scene": {
+      "rva": 27360884,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "global_count": 125701,
+      "global_index": 4885
+    }
+  },
+  "runtime_methods": {
+    "object_get_name": {
+      "rva": 126106132,
+      "module": "UnityEngine.CoreModule.dll",
+      "row": 3441
+    },
+    "set_multi_atlas": {
+      "rva": 124898568,
+      "module": "Unity.TextMeshPro.dll",
+      "row": 488
+    },
+    "fallback_table": {
+      "rva": 124898712,
+      "module": "Unity.TextMeshPro.dll",
+      "row": 506
+    },
+    "clear_font_data": {
+      "rva": 124930324,
+      "module": "Unity.TextMeshPro.dll",
+      "row": 555
+    },
+    "audio_get_time": {
+      "rva": 125637252,
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 80
+    },
+    "audio_get_clip": {
+      "rva": 125637612,
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 84
+    },
+    "audio_clip_get_length": {
+      "rva": 125630540,
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 22
+    },
+    "time_get_realtime": {
+      "rva": 126120424,
+      "module": "UnityEngine.CoreModule.dll",
+      "row": 3765
+    }
+  },
+  "global_method_tables": {
+    "251206": {
+      "registration_rva": 159559272,
+      "count": 251206,
+      "table_rva": 161688176
+    },
+    "125701": {
+      "registration_rva": 159937384,
+      "count": 125701,
+      "table_rva": 169990024
+    }
+  },
+  "codegen_module": {
+    "name": "quaunity-ui.Runtime.dll",
+    "rva": 165604136
+  }
+}

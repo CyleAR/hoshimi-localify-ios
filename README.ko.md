@@ -131,19 +131,21 @@ Unity API를 모의 구현한 ARM64 이미지 테스트와 기존 회귀 테스�
 
 로그는 실행마다 새로 쓰므로 **앱을 다시 켜기 전에 보관**한다. 처음 24개 번역 적중과 100·1,000번째 적중을 기록한다. 번역 키와 문자열 길이만 기록하며 게임이 표시하는 원문 값은 기록하지 않는다.
 
-### 패치 v1.0.0 빌드 및 검증
+### 패치 빌드 및 검증
+
+게임 업데이트 후에는 먼저 [버전 이식 절차](VERSION_PORTING.ko.md)에 따라 새 훅 프로필을 만든다. 현재 6.0.3 build 144의 주소는 `profiles/6.0.3.json`에 보관한다.
 
 ```powershell
 chcp 65001 > $null
-./build-hook.ps1
-python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.2-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --include-images --include-phone-subtitles --patch-revision 48 --output build/IdolyPride-6.0.2-HoshimiLocalify-v1.0.0.ipa
+./build-hook.ps1 -GameVersion 6.0.3
+python tools/package_probe.py --ipa dump/ios/game.qualiarts.idolypride-6.0.3-Decrypted.ipa --dylib build/hook-v2/HoshimiLocalify.dylib --hook-plan build/hook-v2/hook-plan.json --font-file PretendardJP-SemiBold.otf --local-data-root hoshimi-local --include-adv --include-master --include-images --include-phone-subtitles --patch-revision 1 --output build/IdolyPride-6.0.3-HoshimiLocalify-v1.0.1.ipa
 ```
 
 출력 IPA가 이미 있으면 새 이름을 지정한다. 원본 IPA는 변경하지 않는다.
 
 기준 폰트는 개발 폴더의 `PretendardJP-SemiBold.otf`다. 출력 이름은 매번 새 이름을 사용한다.
 
-`tools/static_hook.py`는 원본 UnityFramework 전체 SHA-256, IL2CPP 코드 등록 테이블, 래퍼의 분기와 대상 함수의 시작 명령을 검증한다. 이 입력에서 실제 대상 RVA는 `0x6efc218`이며, v1이 찾은 래퍼 RVA는 `0x6efd66c`다. 다른 게임 버전에는 그대로 적용할 수 없다.
+`tools/static_hook.py`는 원본 UnityFramework 전체 SHA-256, IL2CPP 코드 등록 테이블, 래퍼의 분기와 대상 함수의 시작 명령을 검증한다. 6.0.3의 I18n.SetValue RVA는 `0x6efc268`이다. 이전 게임 버전의 주소를 그대로 적용할 수 없다.
 
 ### hoshimi-local 데이터 사용
 
