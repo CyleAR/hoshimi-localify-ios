@@ -1,0 +1,563 @@
+{
+  "game_version": "6.1.0",
+  "game_build": "155",
+  "ipa_sha256": "5edb02d9bb14cde869e23a0ee2cebade88d4bd1296a35ff878a6e4beae9c0e5d",
+  "unity_sha256": "086fdb39cdb93b362b818322b87396f4fb49f49a684bb18a30f9056e5a7c216f",
+  "patch_version": "1.1.0",
+  "sites": {
+    "i18n": {
+      "rva": 116441572,
+      "prologue": "fa67bba9f85f01a9f65702a9f44f03a9",
+      "method_identity": [
+        "Qua.UI.I18n$$SetValue",
+        "void Qua_UI_I18n__SetValue (Qua_UI_I18n_o* __this, System_String_o* key, System_String_o* value, const MethodInfo* method);",
+        "viiii"
+      ],
+      "module": "quaunity-ui.Runtime.dll",
+      "row": 623
+    },
+    "font_awake": {
+      "rva": 124965704,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "TMPro.TMP_FontAsset$$Awake",
+        "void TMPro_TMP_FontAsset__Awake (TMPro_TMP_FontAsset_o* __this, const MethodInfo* method);",
+        "vii"
+      ],
+      "module": "Unity.TextMeshPro.dll",
+      "row": 514
+    },
+    "adv": {
+      "rva": 115926768,
+      "prologue": "f85fbca9f65701a9f44f02a9fd7b03a9",
+      "method_identity": [
+        "Octo.Loader.OctoResourceLoader$$LoadFromCacheOrDownload",
+        "void Octo_Loader_OctoResourceLoader__LoadFromCacheOrDownload (Octo_Loader_OctoResourceLoader_o* __this, System_String_o* resourceName, System_Action_string__LoadError__o* onComplete, Octo_OnDownloadProgress_o* onProgress, const MethodInfo* method);",
+        "viiiii"
+      ],
+      "module": "Octo.dll",
+      "row": 869
+    },
+    "master": {
+      "rva": 108588556,
+      "prologue": "03008052040080d201000014ff8303d1",
+      "method_identity": [
+        "Google.Protobuf.MessageExtensions$$MergeFrom",
+        "void Google_Protobuf_MessageExtensions__MergeFrom (Google_Protobuf_IMessage_o* message, System_ReadOnlySpan_byte__o span, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "Google.Protobuf.dll",
+      "row": 659
+    },
+    "tmp_set_text": {
+      "rva": 125074584,
+      "prologue": "f44fbea9fd7b01a9fd43009108804339",
+      "method_identity": [
+        "TMPro.TMP_Text$$set_text",
+        "void TMPro_TMP_Text__set_text (TMPro_TMP_Text_o* __this, System_String_o* value, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "Unity.TextMeshPro.dll",
+      "row": 1190
+    },
+    "tmp_populate": {
+      "rva": 125091896,
+      "prologue": "f85fbca9f65701a9f44f02a9fd7b03a9",
+      "method_identity": [
+        "TMPro.TMP_Text$$PopulateTextBackingArray",
+        "void TMPro_TMP_Text__PopulateTextBackingArray (TMPro_TMP_Text_o* __this, System_String_o* sourceText, int32_t start, int32_t length, const MethodInfo* method);",
+        "viiiii"
+      ],
+      "module": "Unity.TextMeshPro.dll",
+      "row": 1383
+    },
+    "tmp_settext_bool": {
+      "rva": 125097816,
+      "prologue": "f44fbea9fd7b01a9fd430091f30301aa",
+      "method_identity": [
+        "TMPro.TMP_Text$$SetText",
+        "void TMPro_TMP_Text__SetText (TMPro_TMP_Text_o* __this, System_String_o* sourceText, bool syncTextInputBox, const MethodInfo* method);",
+        "viiii"
+      ],
+      "module": "Unity.TextMeshPro.dll",
+      "row": 1388
+    },
+    "tmp_setchararray": {
+      "rva": 125100088,
+      "prologue": "f44fbea9fd7b01a9fd430091f30300aa",
+      "method_identity": [
+        "TMPro.TMP_Text$$SetCharArray",
+        "void TMPro_TMP_Text__SetCharArray (TMPro_TMP_Text_o* __this, System_Char_array* sourceText, int32_t start, int32_t length, const MethodInfo* method);",
+        "viiiii"
+      ],
+      "module": "Unity.TextMeshPro.dll",
+      "row": 1402
+    },
+    "textfield": {
+      "rva": 128276092,
+      "prologue": "f85fbca9f65701a9f44f02a9fd7b03a9",
+      "method_identity": [
+        "UnityEngine.UIElements.TextField$$set_value",
+        "void UnityEngine_UIElements_TextField__set_value (UnityEngine_UIElements_TextField_o* __this, System_String_o* value, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "UnityEngine.UIElementsModule.dll",
+      "row": 1380
+    },
+    "ui_text": {
+      "rva": 129294968,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "UnityEngine.UI.Text$$set_text",
+        "void UnityEngine_UI_Text__set_text (UnityEngine_UI_Text_o* __this, System_String_o* value, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "UnityEngine.UI.dll",
+      "row": 1194
+    },
+    "helper": {
+      "rva": 116446776,
+      "prologue": "f44fbea9fd7b01a9fd430091f30301aa",
+      "method_identity": [
+        "Qua.UI.I18nHelper$$SetValue",
+        "void Qua_UI_I18nHelper__SetValue (System_String_o* key, System_String_o* value, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "quaunity-ui.Runtime.dll",
+      "row": 638
+    },
+    "live_result": {
+      "rva": 27361136,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "Solis.Live.LiveUtility$$LoadLiveResult",
+        "void Solis_Live_LiveUtility__LoadLiveResult (Solis_Live_LiveStartTransitionData_o* data, const MethodInfo* method);",
+        "vii"
+      ],
+      "module": "Assembly-CSharp.dll",
+      "row": 4907
+    },
+    "image_sprite": {
+      "rva": 127425676,
+      "prologue": "e923bb6df85f01a9f65702a9f44f03a9",
+      "method_identity": [
+        "UnityEngine.UI.Image$$set_sprite",
+        "void UnityEngine_UI_Image__set_sprite (UnityEngine_UI_Image_o* __this, UnityEngine_Sprite_o* value, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "UnityEngine.UI.dll",
+      "row": 318
+    },
+    "image_override": {
+      "rva": 127489964,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "UnityEngine.UI.Image$$set_overrideSprite",
+        "void UnityEngine_UI_Image__set_overrideSprite (UnityEngine_UI_Image_o* __this, UnityEngine_Sprite_o* value, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "UnityEngine.UI.dll",
+      "row": 321
+    },
+    "image_texture": {
+      "rva": 129228184,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "UnityEngine.UI.RawImage$$set_texture",
+        "void UnityEngine_UI_RawImage__set_texture (UnityEngine_UI_RawImage_o* __this, UnityEngine_Texture_o* value, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "UnityEngine.UI.dll",
+      "row": 887
+    },
+    "image_enable": {
+      "rva": 127468176,
+      "prologue": "f85fbca9f65701a9f44f02a9fd7b03a9",
+      "method_identity": [
+        "UnityEngine.UI.Graphic$$OnEnable",
+        "void UnityEngine_UI_Graphic__OnEnable (UnityEngine_UI_Graphic_o* __this, const MethodInfo* method);",
+        "vii"
+      ],
+      "module": "UnityEngine.UI.dll",
+      "row": 255
+    },
+    "username_adv": {
+      "rva": 75846680,
+      "prologue": "f44fbea9fd7b01a9fd43009193050390",
+      "method_identity": [
+        "Solis.OutGame.ADVEnginePresenterBase<object>$$get_UserName",
+        "System_String_o* Solis_OutGame_ADVEnginePresenterBase_object___get_UserName (Solis_OutGame_ADVEnginePresenterBase_TView__o* __this, const MethodInfo* method);",
+        "iii"
+      ],
+      "pointer_slot_rva": 161855064
+    },
+    "username_message": {
+      "rva": 41306980,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "Solis.Common.Proto.Master.MessageDetail$$GetReplacedMessage",
+        "System_String_o* Solis_Common_Proto_Master_MessageDetail__GetReplacedMessage (Solis_Common_Proto_Master_MessageDetail_o* __this, System_String_o* userName, const MethodInfo* method);",
+        "iiii"
+      ],
+      "module": "Assembly-CSharp.dll",
+      "row": 111687
+    },
+    "username_notification": {
+      "rva": 41306396,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "Solis.Common.Proto.Master.MessageDetail$$GetNotificationText",
+        "System_String_o* Solis_Common_Proto_Master_MessageDetail__GetNotificationText (Solis_Common_Proto_Master_MessageDetail_o* __this, System_String_o* userName, const MethodInfo* method);",
+        "iiii"
+      ],
+      "module": "Assembly-CSharp.dll",
+      "row": 111686
+    },
+    "audio_play": {
+      "rva": 125703452,
+      "prologue": "f44fbea9fd7b01a9fd430091d3890190",
+      "method_identity": [
+        "UnityEngine.AudioSource$$Play",
+        "void UnityEngine_AudioSource__Play (UnityEngine_AudioSource_o* __this, const MethodInfo* method);",
+        "vii"
+      ],
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 88
+    },
+    "audio_play_u64": {
+      "rva": 125703540,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "UnityEngine.AudioSource$$Play",
+        "void UnityEngine_AudioSource__Play (UnityEngine_AudioSource_o* __this, uint64_t delay, const MethodInfo* method);",
+        "viji"
+      ],
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 89
+    },
+    "audio_delayed": {
+      "rva": 125703640,
+      "prologue": "e923bd6df44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "UnityEngine.AudioSource$$PlayDelayed",
+        "void UnityEngine_AudioSource__PlayDelayed (UnityEngine_AudioSource_o* __this, float delay, const MethodInfo* method);",
+        "vifi"
+      ],
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 90
+    },
+    "audio_oneshot": {
+      "rva": 125703864,
+      "prologue": "e923bc6df65701a9f44f02a9fd7b03a9",
+      "method_identity": [
+        "UnityEngine.AudioSource$$PlayOneShot",
+        "void UnityEngine_AudioSource__PlayOneShot (UnityEngine_AudioSource_o* __this, UnityEngine_AudioClip_o* clip, float volumeScale, const MethodInfo* method);",
+        "viifi"
+      ],
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 93
+    },
+    "audio_set_clip": {
+      "rva": 125703172,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "UnityEngine.AudioSource$$set_clip",
+        "void UnityEngine_AudioSource__set_clip (UnityEngine_AudioSource_o* __this, UnityEngine_AudioClip_o* value, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 85
+    },
+    "render_end": {
+      "rva": 126370112,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "UnityEngine.Rendering.RenderPipeline$$EndCameraRendering",
+        "void UnityEngine_Rendering_RenderPipeline__EndCameraRendering (UnityEngine_Rendering_ScriptableRenderContext_o context, UnityEngine_Camera_o* camera, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "UnityEngine.CoreModule.dll",
+      "row": 4840
+    },
+    "quality_fps": {
+      "rva": 117101568,
+      "prologue": "00a000bdc0035fd6f44fbea9fd7b01a9",
+      "method_identity": [
+        "Solis.Common.SolisQualityManager$$set_TargetFrameRate",
+        "void Solis_Common_SolisQualityManager__set_TargetFrameRate (Solis_Common_SolisQualityManager_o* __this, float value, const MethodInfo* method);",
+        "vifi"
+      ],
+      "module": "solis-submodule.Runtime.dll",
+      "row": 2232
+    },
+    "quality_apply": {
+      "rva": 117102384,
+      "prologue": "ff0301d1f65701a9f44f02a9fd7b03a9",
+      "method_identity": [
+        "Solis.Common.SolisQualityManager$$ApplySetting",
+        "void Solis_Common_SolisQualityManager__ApplySetting (Solis_Common_SolisQualityManager_o* __this, const MethodInfo* method);",
+        "vii"
+      ],
+      "module": "solis-submodule.Runtime.dll",
+      "row": 2239
+    },
+    "unity_fps": {
+      "rva": 125753724,
+      "prologue": "f44fbea9fd7b01a9fd430091738901b0",
+      "method_identity": [
+        "UnityEngine.Application$$set_targetFrameRate",
+        "void UnityEngine_Application__set_targetFrameRate (int32_t value, const MethodInfo* method);",
+        "vii"
+      ],
+      "module": "UnityEngine.CoreModule.dll",
+      "row": 359
+    },
+    "live_scene": {
+      "rva": 27360964,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "Solis.Live.LiveUtility$$LoadLiveScene",
+        "void Solis_Live_LiveUtility__LoadLiveScene (Solis_Live_LiveStartTransitionData_o* data, bool isFullSkip, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "Assembly-CSharp.dll",
+      "row": 4905
+    }
+  },
+  "runtime_methods": {
+    "object_get_name": {
+      "rva": 126171612,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "UnityEngine.Object$$get_name",
+        "System_String_o* UnityEngine_Object__get_name (UnityEngine_Object_o* __this, const MethodInfo* method);",
+        "iii"
+      ],
+      "module": "UnityEngine.CoreModule.dll",
+      "row": 3441
+    },
+    "set_multi_atlas": {
+      "rva": 124964048,
+      "prologue": "01900339c0035fd600944339c0035fd6",
+      "method_identity": [
+        "TMPro.TMP_FontAsset$$set_isMultiAtlasTexturesEnabled",
+        "void TMPro_TMP_FontAsset__set_isMultiAtlasTexturesEnabled (TMPro_TMP_FontAsset_o* __this, bool value, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "Unity.TextMeshPro.dll",
+      "row": 488
+    },
+    "fallback_table": {
+      "rva": 124964192,
+      "prologue": "009c40f9c0035fd6019c00f9c0035fd6",
+      "method_identity": [
+        "TMPro.TMP_FontAsset$$get_fallbackFontAssetTable",
+        "System_Collections_Generic_List_TMP_FontAsset__o* TMPro_TMP_FontAsset__get_fallbackFontAssetTable (TMPro_TMP_FontAsset_o* __this, const MethodInfo* method);",
+        "iii"
+      ],
+      "module": "Unity.TextMeshPro.dll",
+      "row": 506
+    },
+    "clear_font_data": {
+      "rva": 124995804,
+      "prologue": "f44fbea9fd7b01a9fd430091f30301aa",
+      "method_identity": [
+        "TMPro.TMP_FontAsset$$ClearFontAssetData",
+        "void TMPro_TMP_FontAsset__ClearFontAssetData (TMPro_TMP_FontAsset_o* __this, bool setAtlasSizeToZero, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "Unity.TextMeshPro.dll",
+      "row": 555
+    },
+    "audio_get_time": {
+      "rva": 125702732,
+      "prologue": "f44fbea9fd7b01a9fd430091d3890190",
+      "method_identity": [
+        "UnityEngine.AudioSource$$get_time",
+        "float UnityEngine_AudioSource__get_time (UnityEngine_AudioSource_o* __this, const MethodInfo* method);",
+        "fii"
+      ],
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 80
+    },
+    "audio_get_clip": {
+      "rva": 125703092,
+      "prologue": "f44fbea9fd7b01a9fd430091d3890190",
+      "method_identity": [
+        "UnityEngine.AudioSource$$get_clip",
+        "UnityEngine_AudioClip_o* UnityEngine_AudioSource__get_clip (UnityEngine_AudioSource_o* __this, const MethodInfo* method);",
+        "iii"
+      ],
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 84
+    },
+    "audio_clip_get_length": {
+      "rva": 125696020,
+      "prologue": "f44fbea9fd7b01a9fd430091d38901d0",
+      "method_identity": [
+        "UnityEngine.AudioClip$$get_length",
+        "float UnityEngine_AudioClip__get_length (UnityEngine_AudioClip_o* __this, const MethodInfo* method);",
+        "fii"
+      ],
+      "module": "UnityEngine.AudioModule.dll",
+      "row": 22
+    },
+    "time_get_realtime": {
+      "rva": 126185904,
+      "prologue": "f44fbea9fd7b01a9fd430091338601b0",
+      "method_identity": [
+        "UnityEngine.Time$$get_realtimeSinceStartup",
+        "float UnityEngine_Time__get_realtimeSinceStartup (const MethodInfo* method);",
+        "fi"
+      ],
+      "module": "UnityEngine.CoreModule.dll",
+      "row": 3765
+    },
+    "camera_instance": {
+      "rva": 129766924,
+      "prologue": "f44fbea9fd7b01a9fd430091136b0190",
+      "method_identity": [
+        "VL.VLCameraController$$get_Instance",
+        "VL_IVLCameraController_o* VL_VLCameraController__get_Instance (const MethodInfo* method);",
+        "ii"
+      ],
+      "module": "vl-unity.Runtime.dll",
+      "row": 757
+    },
+    "quality_names": {
+      "rva": 125872400,
+      "prologue": "f44fbea9fd7b01a9fd43009193880190",
+      "method_identity": [
+        "UnityEngine.QualitySettings$$get_names",
+        "System_String_array* UnityEngine_QualitySettings__get_names (const MethodInfo* method);",
+        "ii"
+      ],
+      "module": "UnityEngine.CoreModule.dll",
+      "row": 1189
+    },
+    "max_texture": {
+      "rva": 126199628,
+      "prologue": "f44fbea9fd7b01a9fd430091138601d0",
+      "method_identity": [
+        "UnityEngine.SystemInfo$$get_maxTextureSize",
+        "int32_t UnityEngine_SystemInfo__get_maxTextureSize (const MethodInfo* method);",
+        "ii"
+      ],
+      "module": "UnityEngine.CoreModule.dll",
+      "row": 3665
+    },
+    "camera_destroy": {
+      "rva": 129806884,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "VL.Rendering.VLSRPCameraController$$DestroyTargetTexture",
+        "void VL_Rendering_VLSRPCameraController__DestroyTargetTexture (VL_Rendering_VLSRPCameraController_o* __this, const MethodInfo* method);",
+        "vii"
+      ],
+      "module": "vl-unity.Runtime.dll",
+      "row": 968
+    }
+  },
+  "global_method_tables": {},
+  "codegen_module": {
+    "name": "quaunity-ui.Runtime.dll",
+    "rva": 165608088
+  },
+  "discovery": {
+    "previous_version": "6.0.2",
+    "method": "exact_method_identity",
+    "old_script_sha256": "eb4a4c5363d1bb4346dbd69e96663376d22400eb914b06018b959d45a03f6bdb",
+    "new_script_sha256": "0c66e699ea488115d2b8f95b9ccb625cb596ccfc709bc898c1cf9b0c60d01ddf"
+  },
+  "extra_sites": {
+    "quality_set": {
+      "rva": 117102220,
+      "prologue": "082440b91f01016b41000054c0035fd6",
+      "method_identity": [
+        "Solis.Common.SolisQualityManager$$SetQuality",
+        "void Solis_Common_SolisQualityManager__SetQuality (Solis_Common_SolisQualityManager_o* __this, int32_t level, const MethodInfo* method);",
+        "viii"
+      ],
+      "module": "solis-submodule.Runtime.dll",
+      "row": 2241
+    },
+    "quality_update": {
+      "rva": 117103676,
+      "prologue": "eb2bbb6de923016df65702a9f44f03a9",
+      "method_identity": [
+        "Solis.Common.SolisQualityManager$$Update",
+        "void Solis_Common_SolisQualityManager__Update (Solis_Common_SolisQualityManager_o* __this, const MethodInfo* method);",
+        "vii"
+      ],
+      "module": "solis-submodule.Runtime.dll",
+      "row": 2248
+    },
+    "quality_init": {
+      "rva": 117101848,
+      "prologue": "f657bda9f44f01a9fd7b02a9fd830091",
+      "method_identity": [
+        "Solis.Common.SolisQualityManager$$OnInitialize",
+        "void Solis_Common_SolisQualityManager__OnInitialize (Solis_Common_SolisQualityManager_o* __this, const MethodInfo* method);",
+        "vii"
+      ],
+      "module": "solis-submodule.Runtime.dll",
+      "row": 2238
+    },
+    "camera_target": {
+      "rva": 129805460,
+      "prologue": "ff8303d1fc6f08a9fa6709a9f85f0aa9",
+      "method_identity": [
+        "VL.Rendering.VLSRPCameraController$$UpdateRenderTarget",
+        "void VL_Rendering_VLSRPCameraController__UpdateRenderTarget (VL_Rendering_VLSRPCameraController_o* __this, int32_t width, int32_t height, bool forceAlpha, const MethodInfo* method);",
+        "viiiii"
+      ],
+      "module": "vl-unity.Runtime.dll",
+      "row": 966
+    },
+    "limited_resolution": {
+      "rva": 129781400,
+      "prologue": "ffc301d1eb2b016de923026df85f03a9",
+      "method_identity": [
+        "VL.VLUtility$$GetLimitedResolution",
+        "System_ValueTuple_int__int__o VL_VLUtility__GetLimitedResolution (int32_t screenWidth, int32_t screenHeight, UnityEngine_Vector2_o aspectRatio, int32_t maxBufferPixel, float bufferScale, bool firstCall, const MethodInfo* method);",
+        "iiiiifii"
+      ],
+      "module": "vl-unity.Runtime.dll",
+      "row": 825
+    },
+    "camera_data": {
+      "rva": 124439276,
+      "prologue": "ffc303d1e923096dfa670aa9f85f0ba9",
+      "method_identity": [
+        "UnityEngine.Rendering.Universal.UniversalRenderPipeline$$InitializeCameraData",
+        "void UnityEngine_Rendering_Universal_UniversalRenderPipeline__InitializeCameraData (UnityEngine_Camera_o* camera, UnityEngine_Rendering_Universal_UniversalAdditionalCameraData_o* additionalCameraData, bool resolveFinalTarget, UnityEngine_Rendering_Universal_CameraData_o* cameraData, const MethodInfo* method);",
+        "viiiii"
+      ],
+      "module": "Unity.RenderPipelines.Universal.Runtime.dll",
+      "row": 740
+    },
+    "shadow_data": {
+      "rva": 129625616,
+      "prologue": "ef3bb66ded33016deb2b026de923036d",
+      "method_identity": [
+        "VL.Rendering.ActorShadowPass$$UpdateShadowData",
+        "bool VL_Rendering_ActorShadowPass__UpdateShadowData (VL_Rendering_ActorShadowPass_o* __this, UnityEngine_Rendering_Universal_RenderingData_o* renderingData, VL_Rendering_DrawActorShadowPass_Settings_o** settings, int32_t resolution, const MethodInfo* method);",
+        "iiiiii"
+      ],
+      "module": "vl-unity-srp.Runtime.dll",
+      "row": 25
+    }
+  },
+  "graphics_fields": {
+    "quality_three_d": 36,
+    "quality_unity": 140,
+    "camera_dynamic": 48,
+    "camera_main": 80,
+    "aa_mode": 80,
+    "aa_quality": 84,
+    "aa_post": 76,
+    "aa_type": 44,
+    "render_camera_data": 16,
+    "camera_data_camera": 128
+  }
+}

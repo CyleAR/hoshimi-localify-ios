@@ -245,6 +245,14 @@ static int update_validate_root(const char *root, const char *expected,
     if (!update_copy_path(path, sizeof(path), root, required[i]) ||
         !update_file_exists(path))
       return 0;
+  /* Older downloaded indexes can hide dictionary translations in a newer IPA. */
+  if (!update_copy_path(path, sizeof(path), root, "ios-data/generic.bin")) return 0;
+  FILE *generic = fopen(path, "rb");
+  if (!generic) return 0;
+  char schema[8];
+  int schema_ok = !fseek(generic, -8, SEEK_END) && fread(schema, 1, 8, generic) == 8 && !memcmp(schema, "HSDEND1", 8);
+  fclose(generic);
+  if (!schema_ok) return 0;
   if (!update_copy_path(path, sizeof(path), root, "version.txt") ||
       !update_read_text(path, version, sizeof(version)))
     return 0;

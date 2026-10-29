@@ -11,3 +11,5 @@
 - Keep the installed identity: display name 아이프라, bundle ID game.qualiarts.idolypride.kr. Update the existing app; do not uninstall it.
 - v29 text translation and v30 image replacement were verified on device. Keep the static hooks.
 - Minor home-loading stutter remains a measured-performance follow-up; its cause is not yet confirmed.
+
+- Current target: 6.1.0 build 155 / patch 1.1.0. Read PORT_6.1.0.ko.md for metadata-based discovery, custom graphics, dictionary indexes and remote schema compatibility.

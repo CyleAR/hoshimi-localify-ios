@@ -101,6 +101,12 @@ def settings_plist():
                 "AutocapitalizationType": "None",
                 "AutocorrectionType": "No",
             },
+            {'Type': 'PSToggleSwitchSpecifier', 'Title': '커스텀 그래픽 설정 사용', 'Key': 'useCustomeGraphicSettings', 'DefaultValue': False},
+            {'Type': 'PSMultiValueSpecifier', 'Title': '그래픽 품질', 'Key': 'graphicQuality', 'DefaultValue': 0, 'Values': [0, 10, 20, 30, 40, 100], 'Titles': ['게임 설정', '낮음', '중간', '높음', '매우 높음', '커스텀']},
+            {'Type': 'PSMultiValueSpecifier', 'Title': '안티앨리어싱', 'Key': 'antiAliasingMode', 'DefaultValue': -1, 'Values': [-1, 0, 1, 2], 'Titles': ['게임 설정', '끔', 'FXAA', 'SMAA 높음']},
+            {'Type': 'PSMultiValueSpecifier', 'Title': '그림자 해상도', 'Key': 'shadowResolution', 'DefaultValue': 0, 'Values': [0, 512, 1024, 2048, 4096], 'Titles': ['게임 설정', '512', '1024', '2048', '4096']},
+            {'Type': 'PSTextFieldSpecifier', 'Title': '렌더 해상도 비율 (%)', 'Key': 'renderScalePercent', 'DefaultValue': '77', 'KeyboardType': 'NumberPad'},
+            {'Type': 'PSTextFieldSpecifier', 'Title': '렌더 해상도 최대 픽셀', 'Key': 'maxBufferPixel', 'DefaultValue': '3384', 'KeyboardType': 'NumberPad'},
             {
                 "Type": "PSGroupSpecifier",
                 "Title": "번역 데이터 업데이트",

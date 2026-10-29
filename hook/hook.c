@@ -1606,6 +1606,8 @@ static int generic_split_translate(const struct GenericHeader *header,
   return changed;
 }
 
+#include "dictionary.h"
+
 static char *generic_translate_utf8(const char *input, size_t length,
                                     size_t *output_length, int *translated,
                                     int normalize_untranslated) {
@@ -1687,6 +1689,14 @@ static char *generic_translate_utf8(const char *input, size_t length,
           did_translate = 1;
           match = fmt;
         }
+      }
+    }
+    if (!match) {
+      selected_length = 0;
+      selected[0] = 0;
+      if (dictionary_translate(input, length, selected, capacity, &selected_length)) {
+        did_translate = 1;
+        match = (const struct GenericEntry *)1;
       }
     }
     if (!match) {
@@ -2777,9 +2787,9 @@ static void *username_notification_hook(void *self, void *name,
     free(input);
     return text;
   }
-  /* Android notifications apply ResolveJosa only, not generic/ligature rules.
-   */
-  char *output = normalize_text(input, length, capacity, &result_length, 1);
+  /* Android now applies generic dictionary translations to notification text. */
+  int translated = 0;
+  char *output = generic_translate_utf8(input, length, &result_length, &translated, 1);
   void *result = text;
   if (output && (length != result_length || memcmp(input, output, length))) {
     void *localized = string_new_utf8(output);
@@ -2791,6 +2801,9 @@ static void *username_notification_hook(void *self, void *name,
   return result;
 }
 
+#include "graphics.h"
+#include "notifications.h"
+
 static void quality_set_fps_hook(void *self, float value,
                                  const void *method) {
   original_quality_set_fps(
@@ -2800,6 +2813,7 @@ static void quality_set_fps_hook(void *self, float value,
 static void quality_apply_hook(void *self, const void *method) {
   if (target_frame_rate)
     original_quality_set_fps(self, (float)target_frame_rate, 0);
+  graphics_before_apply(self);
   original_quality_apply(self, method);
 }
 
@@ -3135,6 +3149,7 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
     record("MASTER DISABLED: useMasterTrans=OFF");
   }
   if (load_generic_index()) {
+    notifications_install();
     record("GENERIC READY: exact/translated/plus/format/split lookup active");
   } else {
     record("GENERIC WARN: embedded generic.bin was not found or invalid; "
@@ -3216,6 +3231,48 @@ static void image_added(const struct mach_header *header, intptr_t slide) {
     record("PHONE DISABLED: usePhoneSubtitles=OFF");
   }
 
+#ifdef HOSHIMI_QUALITY_SET_TARGET_RVA
+  graphics_thread_id = (uintptr_t (*)(void))dlsym((void *)(intptr_t)-2, "pthread_self");
+  graphics_enabled = read_boolean_setting("useCustomeGraphicSettings", 0);
+  graphics_quality = read_integer_setting("graphicQuality", 0);
+  graphics_scale = read_integer_setting("renderScalePercent", 77);
+  if (graphics_scale < 25) graphics_scale = 25;
+  if (graphics_scale > 200) graphics_scale = 200;
+  graphics_max = read_integer_setting("maxBufferPixel", 3384);
+  if (graphics_max < 256) graphics_max = 256;
+  if (graphics_max > 4096) graphics_max = 4096;
+  graphics_max &= ~1;
+  graphics_aa = read_integer_setting("antiAliasingMode", -1);
+  if (graphics_aa < -1 || graphics_aa > 2) graphics_aa = -1;
+  graphics_shadow = read_integer_setting("shadowResolution", 0);
+  if (graphics_shadow != 512 && graphics_shadow != 1024 && graphics_shadow != 2048 && graphics_shadow != 4096) graphics_shadow = 0;
+  graphics_names = (void *(*)(const void *))(base + HOSHIMI_RUNTIME_QUALITY_NAMES_RVA);
+  graphics_destroy = (void (*)(void *, const void *))(base + HOSHIMI_RUNTIME_CAMERA_DESTROY_RVA);
+  graphics_instance = (void *(*)(const void *))(base + HOSHIMI_RUNTIME_CAMERA_INSTANCE_RVA);
+  graphics_max_texture = (int (*)(const void *))(base + HOSHIMI_RUNTIME_MAX_TEXTURE_RVA);
+  if (memcmp((void *)(base + HOSHIMI_QUALITY_SET_TARGET_RVA), quality_set_patched_entry_hex, 4) || memcmp((void *)(base + HOSHIMI_QUALITY_SET_CAVE_RVA), quality_set_gateway_hex, sizeof(quality_set_gateway_hex))) { record("FAIL: quality_set gateway mismatch"); return; }
+  graphics_set = (void (*)(void *, int, const void *))(base + HOSHIMI_QUALITY_SET_ORIGINAL_RVA);
+  __atomic_store_n((uintptr_t *)(base + HOSHIMI_QUALITY_SET_SLOT_RVA), (uintptr_t)graphics_set_hook, __ATOMIC_RELEASE);
+  if (memcmp((void *)(base + HOSHIMI_QUALITY_UPDATE_TARGET_RVA), quality_update_patched_entry_hex, 4) || memcmp((void *)(base + HOSHIMI_QUALITY_UPDATE_CAVE_RVA), quality_update_gateway_hex, sizeof(quality_update_gateway_hex))) { record("FAIL: quality_update gateway mismatch"); return; }
+  graphics_update = (void (*)(void *, const void *))(base + HOSHIMI_QUALITY_UPDATE_ORIGINAL_RVA);
+  __atomic_store_n((uintptr_t *)(base + HOSHIMI_QUALITY_UPDATE_SLOT_RVA), (uintptr_t)graphics_update_hook, __ATOMIC_RELEASE);
+  if (memcmp((void *)(base + HOSHIMI_QUALITY_INIT_TARGET_RVA), quality_init_patched_entry_hex, 4) || memcmp((void *)(base + HOSHIMI_QUALITY_INIT_CAVE_RVA), quality_init_gateway_hex, sizeof(quality_init_gateway_hex))) { record("FAIL: quality_init gateway mismatch"); return; }
+  graphics_init = (void (*)(void *, const void *))(base + HOSHIMI_QUALITY_INIT_ORIGINAL_RVA);
+  __atomic_store_n((uintptr_t *)(base + HOSHIMI_QUALITY_INIT_SLOT_RVA), (uintptr_t)graphics_init_hook, __ATOMIC_RELEASE);
+  if (memcmp((void *)(base + HOSHIMI_CAMERA_TARGET_TARGET_RVA), camera_target_patched_entry_hex, 4) || memcmp((void *)(base + HOSHIMI_CAMERA_TARGET_CAVE_RVA), camera_target_gateway_hex, sizeof(camera_target_gateway_hex))) { record("FAIL: camera_target gateway mismatch"); return; }
+  graphics_camera_target = (void (*)(void *, int, int, uint8_t, const void *))(base + HOSHIMI_CAMERA_TARGET_ORIGINAL_RVA);
+  __atomic_store_n((uintptr_t *)(base + HOSHIMI_CAMERA_TARGET_SLOT_RVA), (uintptr_t)graphics_target_hook, __ATOMIC_RELEASE);
+  if (memcmp((void *)(base + HOSHIMI_LIMITED_RESOLUTION_TARGET_RVA), limited_resolution_patched_entry_hex, 4) || memcmp((void *)(base + HOSHIMI_LIMITED_RESOLUTION_CAVE_RVA), limited_resolution_gateway_hex, sizeof(limited_resolution_gateway_hex))) { record("FAIL: limited_resolution gateway mismatch"); return; }
+  graphics_resolution = (struct GraphicsResolution (*)(int, int, struct GraphicsRatio, int, float, uint8_t, const void *))(base + HOSHIMI_LIMITED_RESOLUTION_ORIGINAL_RVA);
+  __atomic_store_n((uintptr_t *)(base + HOSHIMI_LIMITED_RESOLUTION_SLOT_RVA), (uintptr_t)graphics_resolution_hook, __ATOMIC_RELEASE);
+  if (memcmp((void *)(base + HOSHIMI_CAMERA_DATA_TARGET_RVA), camera_data_patched_entry_hex, 4) || memcmp((void *)(base + HOSHIMI_CAMERA_DATA_CAVE_RVA), camera_data_gateway_hex, sizeof(camera_data_gateway_hex))) { record("FAIL: camera_data gateway mismatch"); return; }
+  graphics_camera_data = (void (*)(void *, void *, uint8_t, void *, const void *))(base + HOSHIMI_CAMERA_DATA_ORIGINAL_RVA);
+  __atomic_store_n((uintptr_t *)(base + HOSHIMI_CAMERA_DATA_SLOT_RVA), (uintptr_t)graphics_data_hook, __ATOMIC_RELEASE);
+  if (memcmp((void *)(base + HOSHIMI_SHADOW_DATA_TARGET_RVA), shadow_data_patched_entry_hex, 4) || memcmp((void *)(base + HOSHIMI_SHADOW_DATA_CAVE_RVA), shadow_data_gateway_hex, sizeof(shadow_data_gateway_hex))) { record("FAIL: shadow_data gateway mismatch"); return; }
+  graphics_shadow_data = (uint8_t (*)(void *, void *, void **, int, const void *))(base + HOSHIMI_SHADOW_DATA_ORIGINAL_RVA);
+  __atomic_store_n((uintptr_t *)(base + HOSHIMI_SHADOW_DATA_SLOT_RVA), (uintptr_t)graphics_shadow_hook, __ATOMIC_RELEASE);
+  record("CUSTOM GRAPHICS: enabled=%d quality=%d scale=%d max=%d aa=%d shadow=%d", graphics_enabled, graphics_quality, graphics_scale, graphics_max, graphics_aa, graphics_shadow);
+#endif
   original_quality_set_fps =
       (QualitySetFps)(base + HOSHIMI_QUALITY_FPS_ORIGINAL_RVA);
   original_quality_apply =

@@ -51,7 +51,7 @@ def codegen_modules(data):
     found = {}
     for pos in range(seg["offset"], seg["offset"] + seg["filesize"] - 24, 8):
         name, count, table = struct.unpack_from("<3Q", data, pos)
-        if not (0x1000 < name < len(data) - 100 and 0 < count < 100000 and
+        if not (0x1000 < name < len(data) - 100 and 0 < count < 1000000 and
                 seg["offset"] < table < len(data) - 8 * count):
             continue
         end = data.find(b"\0", name, name + 100)
@@ -225,6 +225,57 @@ def discover(previous, old_data, info, new_data, patch_version):
                           "global_method_sites": sum("global_index" in s for s in sites.values())}}
 
 
+
+def semantic_discover(previous, old_data, info, new_data, old_script, new_script, patch_version):
+    """Match exact Dumper method identities when registration rows have changed."""
+    import re
+    def identity(item):
+        signature = re.sub(r"MethodInfo_[0-9A-Fa-f]+", "MethodInfo", item["Signature"])
+        return (item["Name"], signature, item["TypeSignature"])
+    old_methods = json.loads(old_script.read_text(encoding="utf-8-sig"))["ScriptMethod"]
+    new_methods = json.loads(new_script.read_text(encoding="utf-8-sig"))["ScriptMethod"]
+    by_address, by_identity = {}, {}
+    for item in old_methods:
+        by_address.setdefault(item["Address"], []).append(item)
+    for item in new_methods:
+        by_identity.setdefault(identity(item), []).append(item)
+    modules = codegen_modules(new_data)
+    reverse = method_rows(new_data, modules)
+    def resolve(name, old):
+        originals = by_address.get(old["rva"], [])
+        matches = {}
+        for original in originals:
+            for candidate in by_identity.get(identity(original), []):
+                matches[candidate["Address"]] = candidate
+        if len(matches) != 1:
+            raise ValueError(f"Method identity not unique: {name}: {len(matches)}")
+        address, candidate = next(iter(matches.items()))
+        if old_data[old["rva"]:old["rva"]+4] != new_data[address:address+4]:
+            raise ValueError(f"Entry instruction changed: {name}")
+        result = {"rva": address, "prologue": new_data[address:address+16].hex(),
+                  "method_identity": list(identity(candidate))}
+        rows = reverse.get(address, [])
+        if len(rows) == 1:
+            result.update(module=rows[0][0], row=rows[0][1])
+        else:
+            needle = struct.pack("<Q", address)
+            slot = new_data.find(needle)
+            if slot < 0 or slot % 8 or new_data.find(needle, slot+1) >= 0:
+                raise ValueError(f"Method pointer slot not unique: {name}")
+            result["pointer_slot_rva"] = slot
+        return result
+    if hashlib.sha256(old_data).hexdigest() != previous["unity_sha256"]:
+        raise ValueError("Previous IPA does not match profile")
+    return {**info, "patch_version": patch_version,
+            "sites": {name: resolve(name, site) for name, site in previous["sites"].items()},
+            "runtime_methods": {name: resolve(name, site) for name, site in previous["runtime_methods"].items()},
+            "global_method_tables": {},
+            "codegen_module": {"name": "quaunity-ui.Runtime.dll", "rva": modules["quaunity-ui.Runtime.dll"]["rva"]},
+            "discovery": {"previous_version": previous["game_version"], "method": "exact_method_identity",
+                          "old_script_sha256": hashlib.sha256(old_script.read_bytes()).hexdigest(),
+                          "new_script_sha256": hashlib.sha256(new_script.read_bytes()).hexdigest()}}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--from-ipa", type=Path, required=True)
@@ -232,6 +283,9 @@ def main():
     parser.add_argument("--to-ipa", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--patch-version", default="1.0.1")
+    parser.add_argument("--from-script", type=Path)
+    parser.add_argument("--to-script", type=Path)
+    parser.add_argument("--to-dump", type=Path, help="Dumper dump.cs; adds custom graphics hooks")
     args = parser.parse_args()
     previous = json.loads(args.from_profile.read_text(encoding="utf-8")) if args.from_profile else baseline(args.from_ipa)
     if args.to_ipa:
@@ -239,9 +293,15 @@ def main():
         if info["ipa_sha256"] != previous["ipa_sha256"]:
             raise ValueError("Previous IPA SHA-256 differs from its saved profile")
         new_info, new_data = read_ipa(args.to_ipa)
-        profile = discover(previous, old_data, new_info, new_data, args.patch_version)
+        if args.from_script and args.to_script:
+            profile = semantic_discover(previous, old_data, new_info, new_data, args.from_script, args.to_script, args.patch_version)
+        else:
+            profile = discover(previous, old_data, new_info, new_data, args.patch_version)
     else:
         profile = previous
+    if args.to_dump:
+        from graphics_profile import augment
+        profile = augment(profile, new_data, args.to_script, args.to_dump)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(profile, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Saved {args.output}: {profile['game_version']} build {profile['game_build']}, "

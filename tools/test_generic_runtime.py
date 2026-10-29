@@ -19,6 +19,7 @@ SUPPORT = r'''
 #include <stdint.h>
 static uintptr_t heap;
 void *malloc(size_t n) { void *p=(void *)heap; heap+=(n+15)&~15UL; return p; }
+void *memset(void *p,int c,size_t n) { for(size_t i=0;i<n;i++) ((char*)p)[i]=(char)c; return p; }
 void free(void *p) { (void)p; }
 size_t strlen(const char *s) { size_t n=0; while(s[n]) ++n; return n; }
 void *memcpy(void *d,const void *s,size_t n) { for(size_t i=0;i<n;i++) ((char*)d)[i]=((const char*)s)[i]; return d; }
@@ -72,7 +73,7 @@ __attribute__((section(".entry"))) char *run(char *input, void *blob, size_t siz
         path = Path(cls.temp.name)
         (path / "test.c").write_text(SUPPORT + norm + generic + wrapper, encoding="utf-8")
         (path / "link.ld").write_text("SECTIONS { . = 0x100000; .text : { *(.entry) *(.text*) } .rodata : { *(.rodata*) } .data : { *(.data*) } .bss : { *(.bss*) } }")
-        subprocess.run([str(llvm / "clang.exe"), "--target=aarch64-none-elf", "-ffreestanding", "-fno-stack-protector", "-O1", "-c", str(path / "test.c"), "-o", str(path / "test.o")], check=True)
+        subprocess.run([str(llvm / "clang.exe"), "--target=aarch64-none-elf", "-ffreestanding", "-fno-stack-protector", "-O1", "-I", str(ROOT / "hook"), "-c", str(path / "test.c"), "-o", str(path / "test.o")], check=True)
         subprocess.run([str(llvm / "ld.lld.exe"), "-T", str(path / "link.ld"), "--oformat=binary", str(path / "test.o"), "-o", str(path / "test.bin")], check=True)
         cls.code = (path / "test.bin").read_bytes()
         cls.blob = make_blob()
@@ -95,6 +96,20 @@ __attribute__((section(".entry"))) char *run(char *input, void *blob, size_t siz
         uc.emu_start(0x100000, 0x200000, count=2000000)
         self.assertNotEqual(uc.reg_read(UC_ARM64_REG_X0), 0)
         return bytes(uc.mem_read(uc.reg_read(UC_ARM64_REG_X0), 16384)).split(b"\0")[0].decode()
+
+
+    def test_dictionary_patterns_match_android_policy(self):
+        import json
+        from generic_data import compile_generic
+        with tempfile.TemporaryDirectory(dir=ROOT / "build") as directory:
+            root=Path(directory); local=root / "local-files"; (local / "genericTrans").mkdir(parents=True)
+            (local / "prefill_dictionary.json").write_text(json.dumps({"idol":{"長瀬麻奈":"나가세 마나","長瀬":"나가세"}}),encoding="utf-8")
+            (local / "genericTrans/generic.json").write_text(json.dumps({"{idol}のスコア{0}%":"{idol}의 점수 {0}%","{idol}と{idol}":"{idol}와 {idol}"}),encoding="utf-8")
+            self.blob=compile_generic(root)[0]
+        self.assertEqual(self.translate("長瀬麻奈のスコア１２３%"),"나가세 마나의 점수 １２３%")
+        self.assertEqual(self.translate("長瀬と長瀬"),"나가세와 나가세")
+        self.assertEqual(self.translate("長瀬と長瀬麻奈"),"長瀬と長瀬麻奈")
+        self.assertEqual(self.translate("나가세 마나의 점수 １２３%"),"나가세 마나의 점수 １２３%")
 
     def test_untranslated_numeric_and_tagged_text_never_duplicates(self):
         for text in ["13920", "G3", "12:00 시작", "5일 남음", "<b>Dummy.</b>", "plain", ""]:

@@ -83,6 +83,8 @@ def prepare(ipa, translation, out, profile=None):
         "fallback_table": {"rva": 0x771CD98}, "clear_font_data": {"rva": 0x7724914},
         "audio_get_time": {"rva": 0x77D1284}, "audio_get_clip": {"rva": 0x77D13EC},
         "audio_clip_get_length": {"rva": 0x77CF84C}, "time_get_realtime": {"rva": 0x78471E8}}
+    for name, offset in (profile.get("graphics_fields", {}) if profile else {}).items():
+        header.append(f"#define HOSHIMI_FIELD_{name.upper()} {offset}")
     for name, method in runtime_methods.items():
         header.append(f"#define HOSHIMI_RUNTIME_{name.upper()}_RVA 0x{method['rva']:x}ULL")
     live_result = profile["sites"]["live_result"]["rva"] if profile else 0x1A17F20
@@ -100,7 +102,7 @@ def prepare(ipa, translation, out, profile=None):
                  "username_notification", "audio_play", "audio_play_u64",
                  "audio_delayed", "audio_oneshot", "audio_set_clip", "render_end",
                  "quality_fps", "quality_apply", "unity_fps",
-                 "live_scene"):
+                 "live_scene", *(profile.get("extra_sites", {}) if profile else {})):
         for suffix in ("target_rva", "cave_rva", "slot_rva", "original_rva"):
             key = f"{name}_{suffix}"
             header.append(f"#define HOSHIMI_{key.upper()} 0x{hook[key]:x}ULL")
@@ -120,7 +122,7 @@ def prepare(ipa, translation, out, profile=None):
                  "username_notification", "audio_play", "audio_play_u64",
                  "audio_delayed", "audio_oneshot", "audio_set_clip", "render_end",
                  "quality_fps", "quality_apply", "unity_fps",
-                 "live_scene"):
+                 "live_scene", *(profile.get("extra_sites", {}) if profile else {})):
         for suffix in ("gateway_hex", "patched_entry_hex", "target_original_hex"):
             key = f"{name}_{suffix}"
             header.append("static const unsigned char " + key + "[] = {" +

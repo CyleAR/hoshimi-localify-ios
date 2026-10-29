@@ -105,6 +105,7 @@ def activate_profile(profile=None):
         globals()[category] = tuple(
             (name, sites[name]["rva"], bytes.fromhex(sites[name]["prologue"]))
             for name, _, _ in _LEGACY[category])
+    globals()["GRAPHICS_SITES"] += tuple((name, site["rva"], bytes.fromhex(site["prologue"])) for name, site in profile.get("extra_sites", {}).items())
     globals()["UNITY_SHA256"] = profile["unity_sha256"]
     globals()["MODULE"] = profile["codegen_module"]["rva"]
 
@@ -180,7 +181,9 @@ def plan(data, profile=None):
     name_off = va_to_offset(name)
     if data[name_off:name_off + 23] != b"quaunity-ui.Runtime.dll" or count < HELPER_ROW:
         raise ValueError("Codegen module mismatch")
-    for row, expected in ((TOKEN_ROW, TARGET), (HELPER_ROW, HELPER)):
+    target_row = profile["sites"]["i18n"]["row"] if profile else TOKEN_ROW
+    helper_row = profile["sites"]["helper"]["row"] if profile else HELPER_ROW
+    for row, expected in ((target_row, TARGET), (helper_row, HELPER)):
         actual = struct.unpack_from("<Q", data, va_to_offset(table + 8 * (row - 1)))[0]
         if actual != expected:
             raise ValueError("Codegen method pointer mismatch")
@@ -202,7 +205,7 @@ def plan(data, profile=None):
                          for count in profile["global_method_tables"]}
         if global_tables != profile["global_method_tables"]:
             raise ValueError("Saved global method table mismatch")
-        for site_name, site in profile["sites"].items():
+        for site_name, site in {**profile["sites"], **profile.get("extra_sites", {})}.items():
             target = site["rva"]
             if data[target:target + 16].hex() != site["prologue"]:
                 raise ValueError(f"Saved hook prologue mismatch: {site_name}")
@@ -212,6 +215,8 @@ def plan(data, profile=None):
                 if not 1 <= row <= module["count"] or struct.unpack_from(
                         "<Q", data, module["table"] + 8 * (row - 1))[0] != target:
                     raise ValueError(f"Codegen method pointer mismatch: {site_name}")
+            if "pointer_slot_rva" in site and struct.unpack_from("<Q", data, site["pointer_slot_rva"])[0] != target:
+                raise ValueError(f"Saved method pointer mismatch: {site_name}")
             if "global_index" in site:
                 table = global_tables[str(site["global_count"])]
                 index = site["global_index"]
@@ -219,6 +224,10 @@ def plan(data, profile=None):
                         "<Q", data, table["table_rva"] + 8 * index)[0] != target:
                     raise ValueError(f"Global method pointer mismatch: {site_name}")
         for method_name, method in profile["runtime_methods"].items():
+            if "module" not in method:
+                if struct.unpack_from("<Q", data, method["pointer_slot_rva"])[0] != method["rva"]:
+                    raise ValueError(f"Runtime method pointer mismatch: {method_name}")
+                continue
             module = modules[method["module"]]
             if struct.unpack_from("<Q", data, module["table"] + 8 * (method["row"] - 1))[0] != method["rva"]:
                 raise ValueError(f"Runtime method pointer mismatch: {method_name}")
@@ -304,7 +313,7 @@ def plan(data, profile=None):
             "patched_entry_hex": struct.pack("<I", branch(TARGET, cave)).hex(),
             "target_original_hex": EXPECTED.hex(), "data_sections_end": data_end,
             "text_sections_end": text_end, "unity_sha256": UNITY_SHA256,
-            "codegen_module_rva": MODULE, "method_token": "0x0600026f",
+            "codegen_module_rva": MODULE, "method_token": f"0x{0x06000000 | target_row:08x}",
             "font_target_rva": FONT_TARGET, "font_cave_rva": font_cave,
             "font_slot_rva": font_slot, "font_original_rva": font_cave + 20,
             "font_gateway_hex": font_code.hex(),

@@ -26,6 +26,19 @@ class HookProfileTests(unittest.TestCase):
     def tearDownClass(cls):
         activate_profile(None)
 
+    def test_610_semantic_profile_and_extra_graphics_gateways(self):
+        ipa=ROOT / "dump/ios/game.qualiarts.idolypride-6.1.0-Decrypted.ipa"
+        if not ipa.exists(): self.skipTest("6.1.0 IPA is needed")
+        profile=json.loads((ROOT / "profiles/6.1.0.json").read_text(encoding="utf-8"))
+        _, unity=read_ipa(ipa)
+        expected=plan(unity,profile);expected["profile"]=profile
+        modified=patch(unity,expected)
+        self.assertEqual(len(profile["extra_sites"]),7)
+        for name,site in {**profile["sites"],**profile["extra_sites"]}.items():
+            if name in ("helper","live_result"): continue
+            key="patched_entry_hex" if name=="i18n" else ("font_patched_entry_hex" if name=="font_awake" else name+"_patched_entry_hex")
+            self.assertEqual(modified[site["rva"]:site["rva"]+4],bytes.fromhex(expected[key]))
+
     def test_saved_discovery_matches_new_ipa(self):
         found = discover(self.old_profile, self.old_unity, self.new_info,
                          self.new_unity, self.new_profile["patch_version"])

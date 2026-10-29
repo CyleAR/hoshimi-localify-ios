@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 import re
 import struct
+from dictionary_data import groups, has_placeholder, compile_dictionary
 
 MAGIC = b"HSGEN2\0"
 HEADER = struct.Struct("<8s7I")
@@ -24,7 +25,7 @@ def _flatten(value):
     result = []
     if not isinstance(value, dict):
         return result
-    for key, item in value.items():
+    for key, item in sorted(value.items()):
         if isinstance(item, dict):
             result.extend(_flatten(item))
         elif isinstance(item, str):
@@ -56,13 +57,16 @@ def _tag_parts(value):
     return parts
 
 
-def _load_file(path, split_file, exact, fmt, split_map, translated):
+def _load_file(path, split_file, exact, fmt, split_map, translated, dictionary=None, patterns=None):
     document = json.loads(path.read_text(encoding="utf-8-sig"))
     for key, value in _flatten(document):
         if split_file and key.startswith(SPLIT_PREFIX) and value.startswith(SPLIT_PREFIX):
             split_value = value[len(SPLIT_PREFIX):]
             split_map[key[len(SPLIT_PREFIX):]] = split_value
             translated.add(split_value)
+        elif dictionary is not None and has_placeholder(key, dictionary):
+            patterns[key] = value
+            translated.add(value)
         elif FORMAT_KEY.search(key):
             fmt[key] = value
             translated.add(value)
@@ -88,6 +92,7 @@ def compile_generic(root: Path):
     if not source.is_dir():
         raise ValueError(f"genericTrans directory was not found: {source}")
     exact, fmt, split, translated = {}, {}, {}, set()
+    dictionary, patterns = groups(root), {}
     # Local::LoadData loads local-files/generic.split.json and generic.json
     # first, followed by every JSON file under genericTrans.
     files = []
@@ -98,7 +103,7 @@ def compile_generic(root: Path):
     files.extend(sorted((p for p in source.rglob("*.json") if p.is_file()),
                         key=lambda p: p.relative_to(source).as_posix()))
     for path in files:
-        _load_file(path, path.name.endswith(".split.json"), exact, fmt, split, translated)
+        _load_file(path, path.name.endswith(".split.json"), exact, fmt, split, translated, dictionary, patterns)
 
     # Local::translatedText also receives localization.json and every string
     # value loaded by MasterLocal.  Keep that guard identical on iOS.
@@ -161,7 +166,11 @@ def compile_generic(root: Path):
     payload = header + b"".join(ENTRY.pack(*row) for row in rows) + pool
     if len(payload) != size:
         raise AssertionError("generic binary size mismatch")
+    extension = compile_dictionary(patterns, dictionary)
+    payload += extension + struct.pack("<I8s", len(payload), b"HSDEND1")
+    payload = payload[:32] + struct.pack("<I", len(payload)) + payload[36:]
     return payload, {
+        "dictionary_patterns": len(patterns),
         "exact": exact_count,
         "format": fmt_count,
         "split": split_count,
