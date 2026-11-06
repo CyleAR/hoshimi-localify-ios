@@ -27,9 +27,15 @@ class HookProfileTests(unittest.TestCase):
         activate_profile(None)
 
     def test_610_semantic_profile_and_extra_graphics_gateways(self):
-        ipa=ROOT / "dump/ios/game.qualiarts.idolypride-6.1.0-Decrypted.ipa"
-        if not ipa.exists(): self.skipTest("6.1.0 IPA is needed")
-        profile=json.loads((ROOT / "profiles/6.1.0.json").read_text(encoding="utf-8"))
+        self.check_semantic_profile("6.1.0")
+
+    def test_611_semantic_profile_and_extra_graphics_gateways(self):
+        self.check_semantic_profile("6.1.1")
+
+    def check_semantic_profile(self, version):
+        ipa=ROOT / f"dump/ios/game.qualiarts.idolypride-{version}-Decrypted.ipa"
+        if not ipa.exists(): self.skipTest(f"{version} IPA is needed")
+        profile=json.loads((ROOT / f"profiles/{version}.json").read_text(encoding="utf-8"))
         _, unity=read_ipa(ipa)
         expected=plan(unity,profile);expected["profile"]=profile
         modified=patch(unity,expected)

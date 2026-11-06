@@ -1,4 +1,4 @@
-param([string]$GameVersion = '6.1.0')
+param([string]$GameVersion = '6.1.1')
 chcp 65001 > $null
 $ErrorActionPreference = 'Stop'
 $env:PYTHONIOENCODING = 'utf-8'
